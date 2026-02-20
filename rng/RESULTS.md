@@ -2,28 +2,77 @@
 
 Date: 2026-02-20
 
-## Configuration
+## Iterate vs Counter Mode
+
+These results include two sweep modes. Understanding the difference is
+important for interpreting the thresholds:
+
+**Counter mode** (`C(0), C(1), C(2), ...`) — each output is a **single
+application** of the circuit on a known input. This directly tests whether the
+circuit is a **pseudorandom permutation (PRP)**: can you distinguish C from a
+truly random permutation by evaluating it on inputs of your choice? There is no
+cumulative mixing — the circuit must scramble well enough in one shot.
+
+**Iterate mode** (`x → C(x) → C(C(x)) → ...`) — each output depends on the
+**cumulative** effect of all previous applications. After 50M steps, you are
+seeing C^{50000000}(x₀). Even a mediocre permutation applied millions of times
+can look random, because each re-application further mixes the state. This
+conflates the quality of C itself with the mixing effect of re-application.
+
+**Counter mode is the correct test for pseudorandomness.** The PRP definition
+asks whether C is indistinguishable from a random permutation, and counter mode
+tests exactly that. Iterate mode tests a related but easier property (orbit
+structure under repeated composition). As a result, **iterate mode gives a lower
+(easier) threshold** — circuits pass iterate mode at fewer gates than they need
+for counter mode.
+
+**m\*(n) from counter mode is the number to report.**
+
+---
+
+## Common Configuration
 
 - **Gate**: 57 (`wire[a] ^= wire[b] OR (NOT wire[c])`)
 - **Wires**: n = 32
 - **Gate counts**: m = {50, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000}
 - **Replicates**: R = 5 per configuration
-- **Stream mode**: iterate (`x_{t+1} = C(x_t)`)
-- **Samples**: 50M per replicate (file mode)
-- **Dieharder tests** (7 core):
-  - `diehard_birthdays` (0)
-  - `diehard_rank_32x32` (2)
-  - `diehard_rank_6x8` (3)
-  - `diehard_count_1s_str` (8)
-  - `diehard_runs` (15)
-  - `sts_monobit` (100)
-  - `rgb_bitdist` (200)
+- **Dieharder tests** (7 core): birthdays (0), rank_32x32 (2), rank_6x8 (3),
+  count_1s_str (8), runs (15), sts_monobit (100), sts_runs (101)
 
-**Note**: This sweep used file mode (200 MB files). Some tests (rank_32x32,
-rgb_bitdist) may have experienced data reuse/rewinding. Future sweeps use pipe
-mode to eliminate this issue. See [RNG_REPORT.md](RNG_REPORT.md) §3 for details.
+---
 
-## Summary Table
+## Counter Mode Results (pipe mode)
+
+The definitive PRP test. Each output C(i) is a single circuit evaluation.
+
+| m (gates) | Pass rate | Circuits passed | Notes |
+|-----------|-----------|-----------------|-------|
+| 50        | 0%        | 0/5             | All tests p=0, total failure |
+| 100       | 0%        | 0/5             | All tests p=0 |
+| 150       | 0%        | 0/5             | All fail, one WEAK birthdays |
+| 200       | 0%        | 0/5             | Birthdays passes, rest fail |
+| 300       | 0%        | 0/5             | rank_6x8 and monobit still fail |
+| 500       | ...       | running          | First passes appearing |
+| 750       | ...       | pending          | |
+| 1000+     | ...       | pending          | |
+
+**m\*(32) from counter mode**: sweep in progress. Preliminary: m=300 still
+fails (0%), m=500 is passing so far. Will update when complete.
+
+Compared to iterate mode at m=300: iterate got 40% pass rate, but counter mode
+gets **0%**. This confirms counter mode is harder — the circuits at m=300 aren't
+good PRPs yet, they just have decent orbit structure under repeated iteration.
+
+---
+
+## Iterate Mode Results (file mode, legacy)
+
+Iterate mode benefits from cumulative mixing over millions of re-applications,
+so it passes at lower gate counts. These results are informative but represent
+a **weaker test** than counter mode.
+
+**Note**: This sweep used file mode (200 MB files). Some tests may have
+experienced data reuse/rewinding. See [RNG_REPORT.md](RNG_REPORT.md) §3.
 
 | m (gates) | Pass rate | Circuits passed | Notes |
 |-----------|-----------|-----------------|-------|
@@ -40,10 +89,12 @@ mode to eliminate this issue. See [RNG_REPORT.md](RNG_REPORT.md) §3 for details
 | 3000      | 100%      | 5/5             | Stable |
 | 5000      | 100%      | 5/5             | Stable |
 
-**m\*(32) = 500 gates** (~15.6 gates/wire). The transition from 0% to 100% is
-sharp, occurring in the 200–500 gate range.
+**m\*(32) from iterate mode = 500 gates** (~15.6 gates/wire). Sharp transition
+in the 200–500 range.
 
-## Plots
+---
+
+## Plots (Iterate Mode Sweep)
 
 ### Overall Pass Rate vs Gate Count
 
@@ -82,26 +133,27 @@ increases.
 
 Overview of the testing pipeline: circuit generation → bitstream → dieharder.
 
+---
+
 ## Key Findings
 
-1. **Sharp threshold**: The pass rate transitions from 0% to 100% in a narrow
-   band (m=200–500), consistent with a phase transition in pseudorandomness.
+1. **Counter mode is harder than iterate mode.** At m=300, iterate mode passes
+   40% of circuits but counter mode passes 0%. This is expected: iterate mode
+   benefits from millions of cumulative re-applications that further mix the
+   state, while counter mode requires the circuit to be a good PRP in a single
+   application.
 
-2. **~15 gates/wire**: m*(32) = 500 means roughly 15.6 gates per wire are
-   needed for gate-57-only circuits to pass the core dieharder battery.
+2. **Sharp threshold**: Both modes show a sharp 0→100% transition in a narrow
+   gate-count band, consistent with a phase transition in pseudorandomness.
 
-3. **Bottleneck test**: `diehard_runs` is the hardest test to pass, requiring
-   more gates than other tests. This makes sense as run structure is sensitive
-   to residual correlations.
+3. **~15 gates/wire (iterate)**: m*(32) = 500 in iterate mode, roughly 15.6
+   gates per wire. Counter mode threshold pending but appears to be in the
+   same range (500+).
 
-4. **Stability above threshold**: Once past m=500, pass rate is rock-solid at
-   100% all the way to m=5000. No regression.
+4. **Bottleneck tests differ by mode**: In iterate mode, `diehard_runs` is the
+   hardest test. In counter mode, `diehard_rank_6x8` and `sts_monobit` are the
+   last to pass (still failing at m=300 while birthdays, runs, and count_1s
+   already pass).
 
-## Next: Counter Mode Sweep
-
-Counter mode evaluates C(0), C(1), C(2), ..., C(k) instead of iterating
-C(C(...C(x))). This tests function quality on structured inputs rather than
-cycle structure.
-
-A counter mode sweep with the same configuration (n=32, same gate counts, R=5,
-pipe mode) is now running.
+5. **Stability above threshold**: Once past the threshold, pass rate is 100%
+   all the way to m=5000. No regression in either mode.

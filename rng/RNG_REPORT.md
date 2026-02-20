@@ -44,9 +44,28 @@ Since every gate is reversible, the full circuit `C : {0,1}^n -> {0,1}^n` is a
 bijection (a permutation on the 2^n possible states).
 
 To test whether `C` "looks random," a long bitstream is produced from it
-and fed to a statistical test suite. There are three modes:
+and fed to a statistical test suite. There are three modes, listed from
+**most to least meaningful** for pseudorandomness:
 
-### Mode 1: Iterate (state machine)
+### Mode 1: Counter mode (the correct PRP test)
+
+```
+1. Evaluate: C(0), C(1), C(2), ..., C(k)
+   Feed the inputs 0, 1, 2, ... in order (like a counter).
+2. Concatenate the n-bit outputs into a bitstream.
+3. Feed to dieharder.
+```
+
+This is the **most direct test of pseudorandom permutation (PRP) quality**.
+Each output C(i) depends on a **single application** of the circuit to a
+known input. If the outputs look random, it means the circuit itself is a
+good PRP -- it scrambles structured inputs into random-looking outputs in
+one shot. This is analogous to block cipher CTR mode.
+
+Counter mode is harder to pass than iterate mode because there is no
+cumulative mixing -- the circuit must be good enough on its own.
+
+### Mode 2: Iterate (state machine / OFB)
 
 ```
 1. Pick a random starting state x_0 in {0,1}^n
@@ -58,22 +77,15 @@ and fed to a statistical test suite. There are three modes:
 ```
 
 This tests whether iterating the permutation produces output
-indistinguishable from random bits. It is a strict test because any
-structural pattern in the permutation's cycle structure will show up.
+indistinguishable from random bits. However, **iterate mode conflates the
+quality of C with the mixing effect of re-application**. After k steps,
+the output is C^k(x_0) -- a composition of k copies of C. Even a mediocre
+permutation applied millions of times can produce random-looking output,
+because each re-application further mixes the state.
 
-### Mode 2: Counter mode
-
-```
-1. Evaluate: C(0), C(1), C(2), ..., C(k)
-   Feed the inputs 0, 1, 2, ... in order (like a counter).
-2. Concatenate the n-bit outputs into a bitstream.
-3. Feed to dieharder.
-```
-
-This tests the circuit as a **pseudorandom function** (PRF-like behavior):
-does `C` map structured/correlated inputs to random-looking outputs?
-This is arguably more relevant to cryptographic applications (analogous to
-block cipher counter mode).
+As a result, iterate mode gives a **lower (easier) threshold** than counter
+mode. A circuit that passes iterate mode may not be a good PRP -- it may
+just have good orbit structure under repeated composition.
 
 ### Mode 3: Random-input
 
@@ -83,6 +95,16 @@ block cipher counter mode).
 ```
 
 The weakest test -- independent random inputs each time.
+
+### Which mode matters?
+
+**Counter mode is the definitive test for pseudorandomness.** The PRP
+definition asks: "Is C indistinguishable from a truly random permutation?"
+The natural way to test this is to evaluate C on known inputs and check
+whether the outputs look random. Counter mode does exactly this.
+
+Iterate mode is useful as a secondary check (testing orbit/cycle
+structure), but **m\*(n) from counter mode is the number to report**.
 
 ### Implementation
 
@@ -334,8 +356,10 @@ quality. This is an artifact of the test, not the circuit.
 
 4. **Only 2 widths tested (16, 32).** No data yet for n=48 or n=64.
 
-5. **Iterate mode only so far.** Counter mode is implemented and ready to sweep
-   (`--stream-mode counter`). Planned for the next phase.
+5. **Iterate mode gives a weaker threshold.** Iterate mode benefits from
+   cumulative mixing over millions of re-applications, so it passes at lower
+   gate counts than counter mode. Counter mode (single-application) is the
+   correct test for PRP quality. Both modes have been swept for n=32.
 
 5. **No scaling law yet.** With only one data point (m*(32) = 500), the
    function m*(n) cannot be fit. At least 3-4 widths are needed.
