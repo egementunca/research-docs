@@ -31,7 +31,7 @@ We treat a random circuit `C` over `n` wires as a permutation on `{0,1}^n`.
 This is the stricter model -- the circuit must sustain randomness when
 composed with itself.
 
-### Mode 2: Counter mode -- proposed, implementation pending
+### Mode 2: Counter mode -- implemented
 - Evaluate `C(0), C(1), C(2), ..., C(k)`.
 - Concatenate the `n`-bit outputs into a bitstream.
 
@@ -67,14 +67,26 @@ Dieharder includes ~30 tests from three families:
 - STS tests (NIST): runs, serial, frequency, etc.
 - RGB tests (Brown): bit distribution, timing, etc.
 
-Each test is run as a **separate dieharder invocation** against the same file:
+Each test is run as a **separate dieharder invocation**. There are two modes:
+
+**Pipe mode (recommended, `--pipe`):**
+```
+local_mixing_bin rng-stream ... | dieharder -g 200 -d <test_id>
+```
+The generator pipes data directly to dieharder. No file, no rewind, no
+size limit. Each test draws exactly the random numbers it needs. The
+generator runs once per (test, replicate) pair with the same seed.
+
+**File mode (legacy):**
 ```
 dieharder -g 201 -f <bitstream.bin> -d <test_id>
 ```
+WARNING: If the file is smaller than what a test needs, dieharder silently
+**rewinds** the file and reuses data, invalidating results. Data requirements
+vary hugely per test (20 MB for birthdays, 2.6 GB for rgb_bitdist, 13 GB
+for rgb_lagged_sum). For the full battery, 10-20 GB minimum.
 
-This avoids the problem with `-a` (full battery mode), which runs tests
-back-to-back and often exhausts the data before reaching later tests.
-The file is a temp file, generated once per replicate and auto-deleted after.
+Pipe mode avoids this problem entirely and is the default going forward.
 
 ### Assessment thresholds (set by dieharder)
 - **PASSED**: p-value in [0.005, 0.995]
@@ -95,6 +107,26 @@ Define threshold:
 
 `m*(n) = min{ m : pass_rate(n,m) >= 0.95 }`
 
+### How many replicates are enough?
+
+Each replicate is an **independent random circuit** -- a completely new
+random permutation. The question is how many independent circuits need to
+be tested at a given (n, m) to reliably estimate the pass rate.
+
+| R | Pass-rate resolution | Use case |
+|---|---------------------|----------|
+| 5 | {0%, 20%, 40%, 60%, 80%, 100%} | Quick sweep: find approximate threshold |
+| 10 | {0%, 10%, 20%, ..., 100%} | Medium sweep: locate transition region |
+| 30 | ~3% resolution | Refinement: estimate pass rate with +/- 3% |
+| 100 | ~1% resolution | Publication-quality confidence intervals |
+
+For context, the USE cipher report used 300 sequences for NIST STS (but
+those test the same cipher, not independent random ciphers).
+
+**Strategy**: R=5 for Phase 1 (find approximate m*), then R=30 around the
+transition region for confidence intervals. R=5 at 12 gate counts takes
+~75 min; R=30 at 5 gate counts around the transition takes ~3.5 hours.
+
 ## Sampling Plan
 
 ### Phase 0: Quick sweep (completed 2026-02-19)
@@ -114,7 +146,7 @@ Define threshold:
 ### Phase 2: Medium sweep (next -- the main deliverable)
 
 ```
-python scripts/rng_sweep.py --mode quick
+python scripts/rng_sweep.py --mode quick --pipe
 ```
 
 | Parameter | Value |
@@ -122,19 +154,18 @@ python scripts/rng_sweep.py --mode quick
 | Widths | n = {32, 48} |
 | Gate counts | m = {100, 200, 500, 1000, 2000} |
 | Replicates | R = 5 |
-| Samples | 50,000,000 |
+| Data mode | Pipe (no file, no rewind) |
 | Tests | 7 core tests |
-| Max temp file | ~300MB (auto-deleted after each replicate) |
 
 **Time estimate:**
-- Per replicate: ~90 seconds (64s gen + 25s tests)
+- Per replicate: ~90 seconds (gen + 25s per test in pipe mode)
 - 2 widths * 5 gates * 5 replicates = 50 replicates
 - Total: **~75 minutes**
 
 ### Phase 3: Extended sweep
 
 ```
-python scripts/rng_sweep.py --mode medium
+python scripts/rng_sweep.py --mode medium --pipe
 ```
 
 | Parameter | Value |
@@ -142,9 +173,8 @@ python scripts/rng_sweep.py --mode medium
 | Widths | n = {32, 48, 64} |
 | Gate counts | m = {100, 200, 500, 1000, 2000, 5000} |
 | Replicates | R = 10 |
-| Samples | 50,000,000 |
+| Data mode | Pipe (no file, no rewind) |
 | Tests | 16 extended tests |
-| Max temp file | ~400MB (auto-deleted) |
 
 **Time estimate:**
 - Per replicate: ~2-3 minutes (gen + 16 tests)
@@ -154,8 +184,8 @@ python scripts/rng_sweep.py --mode medium
 ### Phase 4: Full battery + counter mode comparison
 
 ```
-python scripts/rng_sweep.py --mode full
-python scripts/rng_sweep.py --mode full --stream-mode counter
+python scripts/rng_sweep.py --mode full --pipe
+python scripts/rng_sweep.py --mode full --pipe --stream-mode counter
 ```
 
 | Parameter | Value |
@@ -163,14 +193,17 @@ python scripts/rng_sweep.py --mode full --stream-mode counter
 | Widths | n = {32, 48, 64} |
 | Gate counts | m = {100, 200, 500, 1000, 2000, 5000} |
 | Replicates | R = 10 |
-| Samples | 100,000,000 |
+| Data mode | Pipe (no file, no rewind) |
 | Tests | all 30 tests |
-| Max temp file | ~800MB (auto-deleted) |
 
 **Time estimate:**
-- Per replicate: ~5-8 minutes (gen + 30 tests)
+- Per replicate: ~5-8 minutes (gen + 30 tests in pipe mode)
 - 3 widths * 6 gates * 10 replicates * 2 modes = 360 replicates
 - Total: **~30-48 hours** (can run overnight)
+
+**Note**: The full battery includes rgb_lagged_sum (32 sub-tests) and
+rgb_bitdist (12 sub-tests) which are extremely data-hungry. In file mode
+they would need 10-20 GB per file. Pipe mode handles this transparently.
 
 ### Phase 5: Refinement
 - Narrow the gate-count range around each m*(n) transition
@@ -196,13 +229,14 @@ rm /tmp/stream.bin
 
 ### Sweep runner
 ```bash
-python scripts/rng_sweep.py --mode quick    # 7 tests, R=5, ~75 min
-python scripts/rng_sweep.py --mode medium   # 16 tests, R=10, ~6-9h
-python scripts/rng_sweep.py --mode full     # 30 tests, R=10, ~30h
+# Always use --pipe to avoid data reuse issues:
+python scripts/rng_sweep.py --mode quick --pipe    # 7 tests, R=5, ~75 min
+python scripts/rng_sweep.py --mode medium --pipe   # 16 tests, R=10, ~6-9h
+python scripts/rng_sweep.py --mode full --pipe     # 30 tests, R=10, ~30h
 
 # Override specific parameters:
-python scripts/rng_sweep.py --mode quick --wires 64 --gates 500 1000 --replicates 3
-python scripts/rng_sweep.py --mode quick --stream-mode counter
+python scripts/rng_sweep.py --mode quick --pipe --wires 64 --gates 500 1000 --replicates 3
+python scripts/rng_sweep.py --mode quick --pipe --stream-mode counter
 ```
 
 ### Plot generator

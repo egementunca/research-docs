@@ -127,40 +127,54 @@ satisfy.
 
 ### How the pipeline runs
 
-There are two ways to feed data to dieharder:
-
-**Pipe mode** -- for single tests, no disk needed:
+**Pipe mode (recommended)** -- generator pipes directly to dieharder:
 ```bash
-local_mixing_bin rng-stream --wires 32 --gates 1000 --samples 100000000 \
+local_mixing_bin rng-stream --wires 32 --gates 1000 \
+  --samples 1000000000 --mode iterate --burn-in 1000 --seed 42 \
   | dieharder -g 200 -d 100
 ```
 
-**File mode** -- for running multiple tests on the same stream:
+Each test gets its own pipe invocation. The generator produces data on
+demand -- no file, no size limit, no rewind. Each test draws exactly as
+many random numbers as it needs. The sweep script runs the generator once
+per (test, replicate) pair.
+
+**File mode (legacy, use with caution)**:
 ```bash
 # Generate once:
 local_mixing_bin rng-stream ... --out /tmp/stream.bin
-# Run each test separately (each gets the full file):
+# Run each test separately:
 dieharder -g 201 -f /tmp/stream.bin -d 0
-dieharder -g 201 -f /tmp/stream.bin -d 2
 dieharder -g 201 -f /tmp/stream.bin -d 100
-# Clean up:
 rm /tmp/stream.bin
 ```
 
-The sweep script uses file mode: it generates one temp file per replicate
-(~200-800MB depending on width), runs each test individually against it,
-and deletes the file immediately after. This way only one temp file exists
-at a time, and every test sees the complete data.
+**WARNING -- data reuse in file mode**: If a test needs more data than the
+file contains, dieharder silently **rewinds** the file and cycles through
+it again, producing invalid p-values. Different tests have very different
+data requirements:
 
-**Why not `-a` (full battery)?** The `-a` flag runs all tests back-to-back
-on the same data stream. With piping, dieharder exhausts the data partway
-through. With files, dieharder may re-read the file but some tests still
-get inconsistent data. Running each test as a separate invocation is more
-reliable and gives cleaner per-test results.
+| Test | Rands needed (psamples=100) | Min file size (32-bit) |
+|------|---------------------------|------------------------|
+| diehard_birthdays | ~5M | ~20 MB |
+| diehard_rank_32x32 | ~128M | ~512 MB |
+| diehard_runs | ~10M | ~40 MB |
+| sts_monobit | ~10M | ~40 MB |
+| rgb_bitdist | ~640M | ~2.6 GB |
+| rgb_lagged_sum (lag 31) | ~3.2B | ~13 GB |
+| Full battery (all tests) | ~60-80B | ~250+ GB |
+
+For the 7 core tests, a file must be at least **~3 GB** to avoid rewinds.
+For the full battery, **10-20 GB** is the practical minimum.
+
+The sweep script now supports `--pipe` mode which avoids this problem entirely:
+```bash
+python scripts/rng_sweep.py --mode quick --pipe
+```
 
 Key flags:
-- `-g 200` = read raw binary from stdin (pipe)
-- `-g 201` = read raw binary from file
+- `-g 200` = read raw binary from stdin (pipe, no rewind)
+- `-g 201` = read raw binary from file (may rewind if too small)
 - `-d <N>` = run specific test number N
 
 ### What the output looks like
@@ -302,15 +316,26 @@ quality. This is an artifact of the test, not the circuit.
 
 ## 7. Caveats and Limitations
 
-1. **Only 1 test ran** out of ~30 in the dieharder battery. Results are based
-   on `diehard_rank_32x32` alone.
+1. **Data reuse (rewind) in file mode.** The preliminary sweep used 200 MB
+   temp files (50M samples). This is sufficient for 4 of the 7 core tests
+   but causes data reuse (rewinding) for `diehard_rank_32x32` (~2.6x rewind),
+   `diehard_rank_6x8` (~1.2x), and especially `rgb_bitdist` (~13x rewind).
+   Results from these tests are unreliable.
+   **Fix**: The sweep script now supports `--pipe` mode which avoids this
+   problem entirely by piping the generator directly to dieharder per test.
+   Future sweeps should use `--pipe`.
 
-2. **Only 3 replicates per config.** With R=3, the pass-rate resolution is
-   limited to {0%, 33%, 67%, 100%}. At least R=10 is needed.
+2. **Only 1 test ran in Phase 0** out of ~30 in the dieharder battery.
+   The extended Phase 1 sweep runs 7 core tests.
 
-3. **Only 2 widths tested (16, 32).** No data yet for n=24, 48, or 64.
+3. **Only 3-5 replicates per config.** With R=5, the pass-rate resolution is
+   limited to {0%, 20%, 40%, 60%, 80%, 100%}. At least R=30 is needed for
+   +/- 3% confidence.
 
-4. **Iterate mode only.** Counter mode is now implemented but not yet tested.
+4. **Only 2 widths tested (16, 32).** No data yet for n=48 or n=64.
+
+5. **Iterate mode only so far.** Counter mode is implemented and ready to sweep
+   (`--stream-mode counter`). Planned for the next phase.
 
 5. **No scaling law yet.** With only one data point (m*(32) = 500), the
    function m*(n) cannot be fit. At least 3-4 widths are needed.
