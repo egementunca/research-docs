@@ -1,176 +1,220 @@
-# RNG Sweep Results — Gate 57, n=32
+# RNG Sweep Results — Gate 57
 
-Date: 2026-02-20 (updated 2026-02-19)
+Date: 2026-02-21
 
-## Iterate vs Counter Mode
+## Stream Modes (Block Cipher Modes of Operation)
 
-These results include two sweep modes. Understanding the difference is
-important for interpreting the thresholds:
+We test the same circuit C in two standard modes (see NIST SP 800-38A):
 
-**Counter mode** (`C(0), C(1), C(2), ...`) — each output is a **single
-application** of the circuit on a known input. This directly tests whether the
-circuit is a **pseudorandom permutation (PRP)**: can you distinguish C from a
-truly random permutation by evaluating it on inputs of your choice? There is no
-cumulative mixing — the circuit must scramble well enough in one shot.
+**CTR (Counter) mode** (`C(0), C(1), C(2), ...`): each output is a **single
+application** of the circuit to a distinct counter value. No chaining, no
+cumulative mixing. This is the harder test — the circuit must be a good
+**pseudorandom permutation (PRP)** in a single shot.
 
-**Iterate mode** (`x → C(x) → C(C(x)) → ...`) — each output depends on the
-**cumulative** effect of all previous applications. After 50M steps, you are
-seeing C^{50000000}(x₀). Even a mediocre permutation applied millions of times
-can look random, because each re-application further mixes the state. This
-conflates the quality of C itself with the mixing effect of re-application.
+**OFB (Output Feedback) mode** (`IV → C(IV) → C(C(IV)) → ...`): each output
+is fed back as the next input, so the k-th output is C^k(IV). This is
+equivalent to our **iterate mode**. The USE report (Chamon et al.) and the
+professor's group used OFB. It is an easier test because millions of
+cumulative re-applications provide extra mixing even if C alone is a weak PRP.
 
-**Counter mode is the correct test for pseudorandomness.** The PRP definition
-asks whether C is indistinguishable from a random permutation, and counter mode
-tests exactly that. Iterate mode tests a related but easier property (orbit
-structure under repeated composition). As a result, **iterate mode gives a lower
-(easier) threshold** — circuits pass iterate mode at fewer gates than they need
-for counter mode.
+**PRP (Pseudorandom Permutation)** is the *property* we are testing, not a mode.
+A good PRP should pass tests in both modes. CTR mode is the stricter test of
+PRP quality because each output depends on exactly one application of C.
 
-**m\*(n) from counter mode is the number to report.**
+**m\*(n) from CTR/counter mode is the number to report.** OFB/iterate results
+are for comparison with prior work.
 
 ---
 
-## Common Configuration
+## Cluster Sweep Results (Phase 1) — Counter Mode, R=100
 
-- **Gate**: 57 (`wire[a] ^= wire[b] OR (NOT wire[c])`)
-- **Wires**: n = 32
-- **Gate counts**: m = {50, 100, 150, 200, 300, 500, 750, 1000, 1500, 2000, 3000, 5000}
-- **Replicates**: R = 5 per configuration
-- **Dieharder tests** (7 core): birthdays (0), rank_32x32 (2), rank_6x8 (3),
-  count_1s_str (8), runs (15), sts_monobit (100), sts_runs (101)
+Gate 57, 7 core dieharder tests (pipe mode), max_weak=1, 50M samples.
+
+### n=32
+
+| m (gates) | Pass rate | Passed/100 |
+|-----------|-----------|------------|
+| 200 | 0% | 0/100 |
+| 250 | 0% | 0/100 |
+| 300 | 1% | 1/100 |
+| 350 | 9% | 9/100 |
+| 400 | 39% | 39/100 |
+| 450 | 72% | 72/100 |
+| 500 | 90% | 90/100 |
+| 600 | **97%** | 97/100 |
+
+### n=48
+
+| m (gates) | Pass rate | Passed/100 |
+|-----------|-----------|------------|
+| 300 | 0% | 0/100 |
+| 400 | 0% | 0/100 |
+| 500 | 3% | 3/100 |
+| 600 | 32% | 32/100 |
+| 700 | 67% | 67/100 |
+| 800 | 91% | 91/100 |
+| 1000 | **95%** | 95/100 |
+| 1200 | **97%** | 97/100 |
+
+### n=64
+
+| m (gates) | Pass rate | Passed/100 |
+|-----------|-----------|------------|
+| 400 | 0% | 0/100 |
+| 600 | 0% | 0/100 |
+| 800 | 17% | 17/100 |
+| 1000 | 74% | 74/100 |
+| 1200 | **96%** | 96/100 |
+| 1500 | **98%** | 98/100 |
+| 2000 | **99%** | 99/100 |
+| 2500 | **98%** | 98/100 |
+
+### n=96
+
+| m (gates) | Pass rate | Passed/100 |
+|-----------|-----------|------------|
+| 600 | 0% | 0/100 |
+| 1000 | 2% | 2/100 |
+| 1500 | 71% | 71/100 |
+| 2000 | **98%** | 98/100 |
+| 2500 | **95%** | 95/100 |
+| 3000 | **99%** | 99/100 |
+| 4000 | **100%** | 100/100 |
+| 5000 | **98%** | 98/100 |
+
+### n=128
+
+| m (gates) | Pass rate | Passed/100 |
+|-----------|-----------|------------|
+| 1000 | 0% | 0/100 |
+| 1500 | 6% | 6/100 |
+| 2000 | 73% | 73/100 |
+| 3000 | **100%** | 100/100 |
+| 4000 | **100%** | 100/100 |
+| 5000 | **100%** | 100/100 |
+| 6000 | **100%** | 100/100 |
+| 8000 | **100%** | 100/100 |
 
 ---
 
-## Counter Mode Results (pipe mode)
+## m\*(n) Summary (95% threshold, counter mode)
 
-The definitive PRP test. Each output C(i) is a single circuit evaluation.
+| Width (n) | m\*(n) | Gates/wire | Transition region |
+|-----------|--------|------------|-------------------|
+| 32 | ~600 | 18.8 | 350–600 |
+| 48 | ~1000 | 20.8 | 600–1000 |
+| 64 | ~1200 | 18.8 | 800–1200 |
+| 96 | ~2000 | 20.8 | 1500–2000 |
+| 128 | ~3000 | 23.4 | 2000–3000 |
 
-| m (gates) | Pass rate | Circuits passed | Notes |
-|-----------|-----------|-----------------|-------|
-| 50        | 0%        | 0/5             | All tests p=0, total failure |
-| 100       | 0%        | 0/5             | All tests p=0 |
-| 150       | 0%        | 0/5             | All fail, one WEAK birthdays |
-| 200       | 0%        | 0/5             | Birthdays passes, rest fail |
-| 300       | 0%        | 0/5             | 5-6 of 8 tests pass but rank_6x8 + monobit still fail |
-| 500       | **100%**  | **5/5**         | All circuits pass all tests |
-| 750       | **100%**  | **5/5**         | Stable |
-| 1000+     | ...       | sweep continuing | Expected stable |
-
-**m\*(32) from counter mode = 500 gates** (~15.6 gates/wire).
-
-The transition is sharp: 0% at m=300, 100% at m=500. At m=300, most individual
-tests pass (birthdays, rank_32x32, runs, count_1s, sts_runs), but `rank_6x8`
-and `sts_monobit` consistently fail — these are the bottleneck tests in counter
-mode.
-
-Compared to iterate mode at m=300: iterate got 40% pass rate, but counter mode
-gets **0%**. This confirms counter mode is harder — the circuits at m=300 aren't
-good PRPs yet, they just have decent orbit structure under repeated iteration.
+Scaling: m\*(n) ≈ 20n (gates per wire), possibly with a weak logarithmic correction.
 
 ---
 
-## Iterate Mode Results (file mode, legacy)
+## Observations
 
-Iterate mode benefits from cumulative mixing over millions of re-applications,
-so it passes at lower gate counts. These results are informative but represent
-a **weaker test** than counter mode.
+1. **Gradual transition at R=100.** The R=5 local sweep suggested a sharp 0→100%
+   jump, but at R=100 the S-curve is smooth. The transition spans roughly a factor
+   of 2 in gate count (e.g., n=32: 350–600, n=64: 800–1200).
 
-**Note**: This sweep used file mode (200 MB files). Some tests may have
-experienced data reuse/rewinding. See [RNG_REPORT.md](RNG_REPORT.md) §3.
+2. **Pass rates plateau at 95–99%, not 100%.** At very high gate counts (e.g.,
+   n=96 g=5000: 98%, n=64 g=2500: 98%), occasional WEAK results still cause
+   failures. This is expected stochastic noise at R=100 with max_weak=1.
 
-| m (gates) | Pass rate | Circuits passed | Notes |
-|-----------|-----------|-----------------|-------|
-| 50        | 0%        | 0/5             | All 7 tests FAIL |
-| 100       | 0%        | 0/5             | Birthdays passes, rest fail |
-| 150       | 0%        | 0/5             | Some individual tests pass |
-| 200       | 0%        | 0/5             | Most tests pass, runs still fails |
-| 300       | 40%       | 2/5             | First full passes appear |
-| 500       | 100%      | 5/5             | All circuits pass all tests |
-| 750       | 100%      | 5/5             | Stable |
-| 1000      | 100%      | 5/5             | Stable |
-| 1500      | 100%      | 5/5             | Stable |
-| 2000      | 100%      | 5/5             | Stable |
-| 3000      | 100%      | 5/5             | Stable |
-| 5000      | 100%      | 5/5             | Stable |
+3. **Bottleneck test: sts_monobit (ID 100).** In the transition region, sts_monobit
+   is consistently the last test to pass. Failed replicates at intermediate gate
+   counts almost always show sts_monobit as the sole FAILED test while all other
+   6 tests pass.
 
-**m\*(32) from iterate mode = 500 gates** (~15.6 gates/wire). Sharp transition
-in the 200–500 range.
+4. **m\*(32) revised upward.** Local R=5 suggested m\*(32)=500. At R=100, g=500
+   gives only 90% pass rate. The 95% threshold is at ~600 gates.
+
+5. **Linear scaling.** Gates per wire is roughly constant at ~19–23 across all
+   widths tested, suggesting m\*(n) = O(n) with a constant around 20.
 
 ---
 
-## Plots (Iterate Mode Sweep)
+## Local Results (R=5, n=32, legacy)
 
-### Overall Pass Rate vs Gate Count
+### Counter Mode (pipe mode)
+
+| m (gates) | Pass rate | Circuits passed |
+|-----------|-----------|-----------------|
+| 50 | 0% | 0/5 |
+| 100 | 0% | 0/5 |
+| 150 | 0% | 0/5 |
+| 200 | 0% | 0/5 |
+| 300 | 0% | 0/5 |
+| 500 | 100% | 5/5 |
+| 750 | 100% | 5/5 |
+
+### Iterate Mode (file mode, legacy)
+
+| m (gates) | Pass rate | Circuits passed |
+|-----------|-----------|-----------------|
+| 50 | 0% | 0/5 |
+| 100 | 0% | 0/5 |
+| 150 | 0% | 0/5 |
+| 200 | 0% | 0/5 |
+| 300 | 40% | 2/5 |
+| 500 | 100% | 5/5 |
+| 750+ | 100% | 5/5 |
+
+---
+
+## Plots
+
+### Overall Pass Rate vs Gate Count (all widths, counter mode)
 
 ![Pass rate vs gates](plots/pass_rate_vs_gates.png)
 
-Sharp 0→100% transition between m=200 and m=500. The sigmoid-like curve shows
-a clear threshold effect.
+S-curves for all 5 widths showing the phase transition. Wider circuits require
+proportionally more gates. The transition sharpness is similar across widths.
 
-### Per-Test Pass Rate (n=32)
+### Per-Test Pass Rate
 
-![Per-test pass rate](plots/per_test_pass_rate_w32.png)
+- ![n=32](plots/per_test_pass_rate_w32.png)
+- ![n=48](plots/per_test_pass_rate_w48.png)
+- ![n=64](plots/per_test_pass_rate_w64.png)
+- ![n=96](plots/per_test_pass_rate_w96.png)
+- ![n=128](plots/per_test_pass_rate_w128.png)
 
-Shows which tests are easiest/hardest to pass. `diehard_birthdays` passes first
-(from m=100), while `diehard_runs` is the bottleneck test that drives the
-overall m* threshold.
-
-### P-Value Scatter (All Tests)
+### P-Value Scatter
 
 ![P-value scatter](plots/pvalues_scatter.png)
 
-P-values by gate count across all tests and replicates. Below m=200, p-values
-cluster near 0 or 1 (non-uniform). Above m=500, p-values spread uniformly
-across [0,1] as expected for good randomness.
-
-### P-Values Per Test (6-Panel)
+### P-Values Per Test
 
 ![P-values per test](plots/pvalues_per_test.png)
-
-Breakdown of p-value distributions for each individual test. Shows the
-per-test transition from structured to uniform p-values as gate count
-increases.
 
 ### Pipeline Diagram
 
 ![Pipeline diagram](plots/pipeline_diagram.png)
 
-Overview of the testing pipeline: circuit generation → bitstream → dieharder.
+---
+
+## Comparison with USE Report (Chamon et al.)
+
+| Aspect | USE Report | Our Work |
+|--------|-----------|----------|
+| Cipher | USE block cipher (hierarchical) | Random gate-57 circuits |
+| Mode | OFB (= our iterate mode) | Counter (harder) + iterate |
+| Dieharder | Full battery (~114 tests) | 7 core tests (Phase 1) |
+| NIST STS | Full suite (188 tests) | Not yet (Phase 4) |
+| Widths | Fixed (3^l bits) | 32, 48, 64, 96, 128 |
+| Replicates | 1 config × 300 sequences | 100 random circuits per (n,m) |
+
+**Key difference**: We test many random circuits at varying depths to find the
+pseudorandomness threshold. They test one fixed cipher to confirm it's random.
 
 ---
 
-## Key Findings
+## What Remains
 
-1. **Counter mode m\*(32) = 500** — same threshold as iterate mode, but the
-   transition is sharper (0% at m=300 vs 40% in iterate mode).
+See [CLUSTER_RNG.md](../local_mixing/CLUSTER_RNG.md) for the full cluster deployment guide.
 
-2. **Counter mode is harder than iterate mode.** At m=300, iterate mode passes
-   40% of circuits but counter mode passes 0%. This is expected: iterate mode
-   benefits from millions of cumulative re-applications that further mix the
-   state, while counter mode requires the circuit to be a good PRP in a single
-   application.
-
-3. **Sharp threshold**: Both modes show a sharp 0→100% transition in a narrow
-   gate-count band, consistent with a phase transition in pseudorandomness.
-
-4. **Bottleneck tests differ by mode**: In iterate mode, `diehard_runs` is the
-   hardest test. In counter mode, `diehard_rank_6x8` and `sts_monobit` are the
-   last to pass (still failing at m=300 while birthdays, runs, and count_1s
-   already pass).
-
-5. **Stability above threshold**: Once past the threshold, pass rate is 100%
-   all the way to m=5000. No regression in either mode.
-
----
-
-## Next Steps: Cluster Sweep
-
-The R=5 local sweep gives only 20% resolution on pass rates (0%, 20%, 40%,
-60%, 80%, 100%). To characterize the transition precisely, we need:
-
-- **R=100 replicates** per (n, m) point for smooth transition curves
-- **Multiple widths**: n = 32, 48, 64, 96, 128
-- **Dense gate counts** around each width's transition region
-- **Counter mode only** (the correct PRP test)
-
-See [CLUSTER_RNG.md](CLUSTER_RNG.md) for the full cluster deployment guide.
+1. **Phase 2**: Denser gate counts in transition regions (1,400 jobs)
+2. **Phase 3**: Full dieharder battery at strategic points (300 jobs)
+3. **Phase 4**: NIST STS (188 tests) for comparability with USE report (200 jobs)
+4. **Phase 5**: Iterate mode comparison (800 jobs)
+5. **Scaling law fit**: m\*(n) ~ n^alpha or n*log(n) from the 5+ data points
