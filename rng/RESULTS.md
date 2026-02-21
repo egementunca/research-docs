@@ -1,6 +1,6 @@
 # RNG Sweep Results — Gate 57, n=32
 
-Date: 2026-02-20
+Date: 2026-02-20 (updated 2026-02-19)
 
 ## Iterate vs Counter Mode
 
@@ -51,13 +51,17 @@ The definitive PRP test. Each output C(i) is a single circuit evaluation.
 | 100       | 0%        | 0/5             | All tests p=0 |
 | 150       | 0%        | 0/5             | All fail, one WEAK birthdays |
 | 200       | 0%        | 0/5             | Birthdays passes, rest fail |
-| 300       | 0%        | 0/5             | rank_6x8 and monobit still fail |
-| 500       | ...       | running          | First passes appearing |
-| 750       | ...       | pending          | |
-| 1000+     | ...       | pending          | |
+| 300       | 0%        | 0/5             | 5-6 of 8 tests pass but rank_6x8 + monobit still fail |
+| 500       | **100%**  | **5/5**         | All circuits pass all tests |
+| 750       | **100%**  | **5/5**         | Stable |
+| 1000+     | ...       | sweep continuing | Expected stable |
 
-**m\*(32) from counter mode**: sweep in progress. Preliminary: m=300 still
-fails (0%), m=500 is passing so far. Will update when complete.
+**m\*(32) from counter mode = 500 gates** (~15.6 gates/wire).
+
+The transition is sharp: 0% at m=300, 100% at m=500. At m=300, most individual
+tests pass (birthdays, rank_32x32, runs, count_1s, sts_runs), but `rank_6x8`
+and `sts_monobit` consistently fail — these are the bottleneck tests in counter
+mode.
 
 Compared to iterate mode at m=300: iterate got 40% pass rate, but counter mode
 gets **0%**. This confirms counter mode is harder — the circuits at m=300 aren't
@@ -137,18 +141,17 @@ Overview of the testing pipeline: circuit generation → bitstream → dieharder
 
 ## Key Findings
 
-1. **Counter mode is harder than iterate mode.** At m=300, iterate mode passes
+1. **Counter mode m\*(32) = 500** — same threshold as iterate mode, but the
+   transition is sharper (0% at m=300 vs 40% in iterate mode).
+
+2. **Counter mode is harder than iterate mode.** At m=300, iterate mode passes
    40% of circuits but counter mode passes 0%. This is expected: iterate mode
    benefits from millions of cumulative re-applications that further mix the
    state, while counter mode requires the circuit to be a good PRP in a single
    application.
 
-2. **Sharp threshold**: Both modes show a sharp 0→100% transition in a narrow
+3. **Sharp threshold**: Both modes show a sharp 0→100% transition in a narrow
    gate-count band, consistent with a phase transition in pseudorandomness.
-
-3. **~15 gates/wire (iterate)**: m*(32) = 500 in iterate mode, roughly 15.6
-   gates per wire. Counter mode threshold pending but appears to be in the
-   same range (500+).
 
 4. **Bottleneck tests differ by mode**: In iterate mode, `diehard_runs` is the
    hardest test. In counter mode, `diehard_rank_6x8` and `sts_monobit` are the
@@ -157,3 +160,17 @@ Overview of the testing pipeline: circuit generation → bitstream → dieharder
 
 5. **Stability above threshold**: Once past the threshold, pass rate is 100%
    all the way to m=5000. No regression in either mode.
+
+---
+
+## Next Steps: Cluster Sweep
+
+The R=5 local sweep gives only 20% resolution on pass rates (0%, 20%, 40%,
+60%, 80%, 100%). To characterize the transition precisely, we need:
+
+- **R=100 replicates** per (n, m) point for smooth transition curves
+- **Multiple widths**: n = 32, 48, 64, 96, 128
+- **Dense gate counts** around each width's transition region
+- **Counter mode only** (the correct PRP test)
+
+See [CLUSTER_RNG.md](CLUSTER_RNG.md) for the full cluster deployment guide.
