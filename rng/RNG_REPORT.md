@@ -1,7 +1,7 @@
 # Random Circuits as Pseudorandom Permutations: RNG Testing Report
 
-**Date:** 2026-02-19 (updated 2026-02-19)
-**Status:** Local sweep complete for n=32; cluster sweep planned for n=32-128
+**Date:** 2026-02-21
+**Status:** Phase 1 cluster sweep complete (n=32,48,64,96,128, R=100). Phases 2-5 planned.
 
 ---
 
@@ -47,7 +47,7 @@ To test whether `C` "looks random," a long bitstream is produced from it
 and fed to a statistical test suite. There are three modes, listed from
 **most to least meaningful** for pseudorandomness:
 
-### Mode 1: Counter mode (the correct PRP test)
+### Mode 1: CTR (Counter) mode — primary
 
 ```
 1. Evaluate: C(0), C(1), C(2), ..., C(k)
@@ -56,36 +56,30 @@ and fed to a statistical test suite. There are three modes, listed from
 3. Feed to dieharder.
 ```
 
-This is the **most direct test of pseudorandom permutation (PRP) quality**.
-Each output C(i) depends on a **single application** of the circuit to a
-known input. If the outputs look random, it means the circuit itself is a
-good PRP -- it scrambles structured inputs into random-looking outputs in
-one shot. This is analogous to block cipher CTR mode.
+This is the standard **CTR mode** (NIST SP 800-38A) and the **most direct
+test of pseudorandom permutation (PRP) quality**. Each output C(i) depends
+on a **single application** of the circuit to a known input. If the outputs
+look random, the circuit itself is a good PRP.
 
-Counter mode is harder to pass than iterate mode because there is no
-cumulative mixing -- the circuit must be good enough on its own.
+CTR mode is harder to pass than OFB because there is no cumulative mixing.
 
-### Mode 2: Iterate (state machine / OFB)
+### Mode 2: OFB (Output Feedback) mode — secondary
 
 ```
-1. Pick a random starting state x_0 in {0,1}^n
-2. Discard the first B steps (burn-in) to escape short transients:
-       x_1 = C(x_0),  x_2 = C(x_1),  ...,  x_B = C(x_{B-1})
-3. Emit: x_{B+1}, x_{B+2}, ..., x_{B+k}
-   Each x_t is an n-bit block. Concatenate all blocks into one long bitstream.
-4. Feed the bitstream to dieharder.
+1. Pick a random starting state x_0 (the IV) in {0,1}^n
+2. Emit: C(x_0), C(C(x_0)), C(C(C(x_0))), ...
+   Each output is fed back as the next input (output feedback).
+3. Concatenate into a bitstream. Feed to dieharder.
 ```
 
-This tests whether iterating the permutation produces output
-indistinguishable from random bits. However, **iterate mode conflates the
-quality of C with the mixing effect of re-application**. After k steps,
-the output is C^k(x_0) -- a composition of k copies of C. Even a mediocre
-permutation applied millions of times can produce random-looking output,
-because each re-application further mixes the state.
+This is the standard **OFB mode** (NIST SP 800-38A), equivalent to our
+**iterate mode**. The USE report (Chamon et al.) and the professor's group
+used this mode.
 
-As a result, iterate mode gives a **lower (easier) threshold** than counter
-mode. A circuit that passes iterate mode may not be a good PRP -- it may
-just have good orbit structure under repeated composition.
+OFB **conflates the quality of C with the mixing effect of re-application**.
+After k steps, the output is C^k(IV). Even a mediocre permutation applied
+millions of times can produce random-looking output. As a result, OFB gives
+a **lower (easier) threshold** than CTR.
 
 ### Mode 3: Random-input
 
@@ -98,13 +92,14 @@ The weakest test -- independent random inputs each time.
 
 ### Which mode matters?
 
-**Counter mode is the definitive test for pseudorandomness.** The PRP
+**CTR/counter mode is the definitive test for pseudorandomness.** The PRP
 definition asks: "Is C indistinguishable from a truly random permutation?"
-The natural way to test this is to evaluate C on known inputs and check
-whether the outputs look random. Counter mode does exactly this.
+CTR mode tests exactly this. OFB is useful as a secondary check and for
+comparison with prior work (the USE report), but **m\*(n) from CTR mode is
+the number to report**.
 
-Iterate mode is useful as a secondary check (testing orbit/cycle
-structure), but **m\*(n) from counter mode is the number to report**.
+Note: **PRP is the *property* being tested, not a mode.** A good PRP should
+pass tests in both CTR and OFB modes.
 
 ### Implementation
 
@@ -295,59 +290,77 @@ Beyond per-test p-values, there are several complementary measures:
 
 ---
 
-## 6. Results (n=32, counter mode)
+## 6. Results
 
-### Setup
+### Phase 1: Cluster Sweep (CTR/counter mode, R=100)
 
-- **Width**: n = 32 wires
-- **Gate counts**: m = 50, 100, 150, 200, 300, 500, 750
-- **Replicates**: R = 5 per configuration
+- **Widths**: n = 32, 48, 64, 96, 128
 - **Tests**: 7 core dieharder tests (8 p-values), pipe mode
-- **Stream mode**: counter (C(0), C(1), ..., C(k))
+- **Replicates**: R = 100 per (n, m) point
+- **Stream mode**: CTR/counter
 
-### Counter mode results
+#### m\*(n) Summary (95% pass rate threshold)
+
+| Width (n) | m\*(n) | Gates/wire | Transition region |
+|-----------|--------|------------|-------------------|
+| 32 | ~600 | 18.8 | 350–600 |
+| 48 | ~1000 | 20.8 | 600–1000 |
+| 64 | ~1200 | 18.8 | 800–1200 |
+| 96 | ~2000 | 20.8 | 1500–2000 |
+| 128 | ~3000 | 23.4 | 2000–3000 |
+
+Scaling: m\*(n) ≈ 20n (roughly linear in width).
+
+#### Key observations
+
+1. **Gradual S-curve at R=100.** The R=5 local sweep suggested a sharp 0→100%
+   jump, but at R=100 the transition spans roughly a factor of 2 in gate count.
+
+2. **Pass rates plateau at 95–99%.** Occasional WEAK results at high gate counts
+   are expected stochastic noise with max_weak=1.
+
+3. **Bottleneck test: sts_monobit.** In the transition region, failed replicates
+   almost always fail on sts_monobit (ID 100) while all other 6 tests pass.
+
+4. **m\*(32) revised upward.** Local R=5 gave m\*(32)=500. At R=100, g=500 gives
+   only 90%. The 95% threshold is ~600 gates.
+
+See [RESULTS.md](RESULTS.md) for full per-width tables and plots.
+
+### Local Results (n=32, R=5, legacy)
+
+#### CTR/counter mode
 
 | m (gates) | Pass rate | Notes |
 |-----------|-----------|-------|
-| 50        | 0% (0/5)  | All tests p=0 |
-| 100       | 0% (0/5)  | All tests p=0 |
-| 150       | 0% (0/5)  | All fail |
-| 200       | 0% (0/5)  | Birthdays passes, rest fail |
-| 300       | 0% (0/5)  | 5-6 of 8 tests pass but rank_6x8 + monobit still fail |
-| 500       | **100%** (5/5) | All circuits pass all tests |
-| 750       | **100%** (5/5) | Stable |
+| 50–300 | 0% (0/5) | All fail; at m=300, rank_6x8 + monobit still fail |
+| 500 | **100%** (5/5) | All pass |
+| 750 | **100%** (5/5) | Stable |
 
-**m\*(32) = 500 gates** (~15.6 gates/wire) in counter mode.
+#### OFB/iterate mode comparison
 
-### Iterate mode comparison (same tests, R=5)
+| m (gates) | CTR | OFB |
+|-----------|-----|-----|
+| 200 | 0% | 0% |
+| 300 | 0% | 40% |
+| 500 | 100% | 100% |
 
-| m (gates) | Counter | Iterate |
-|-----------|---------|---------|
-| 200       | 0%      | 0%      |
-| 300       | 0%      | 40%     |
-| 500       | 100%    | 100%    |
-
-Both modes give m\*(32) = 500, but the transition is sharper in counter mode:
-at m=300, iterate passes 40% (cumulative mixing helps) while counter passes 0%.
-
-### Bottleneck tests
-
-At m=300 in counter mode, most individual tests pass (birthdays, rank_32x32,
-runs, count_1s, sts_runs) but `diehard_rank_6x8` and `sts_monobit` consistently
-fail — these are the last tests to be satisfied as gate count increases.
+At m=300, OFB passes 40% (cumulative mixing helps) while CTR passes 0%.
+Both converge at m=500.
 
 ---
 
 ## 7. Caveats and Limitations
 
-1. **Only R=5 replicates.** Pass-rate resolution is limited to 20% increments.
-   The cluster sweep with R=100 will give ~1% resolution and smooth curves.
+1. **Only 7 of ~114 dieharder tests.** Phase 1 used 7 core tests. The USE report
+   ran the full battery (~114 tests) plus NIST STS (188 tests). Phase 3 and 4
+   will close this gap.
 
-2. **Only n=32 tested so far.** No data yet for n=48, 64, 96, 128.
-   The cluster sweep covers all five widths.
+2. **No OFB/iterate data at R=100 yet.** The CTR vs OFB comparison is from R=5
+   local runs only. Phase 5 will provide R=20 OFB data across all widths.
 
-3. **No scaling law yet.** With only one data point (m*(32) = 500), the
-   function m*(n) cannot be fit. Need 3-4 widths minimum.
+3. **Scaling law is preliminary.** m\*(n) ≈ 20n is a rough fit from 5 data points.
+   Phase 2 (denser gate counts) will refine the transition curves.
 
 4. **File mode data reuse (historical).** Early sweeps used file mode which
    caused dieharder to silently rewind small files. All current sweeps use
@@ -355,13 +368,19 @@ fail — these are the last tests to be satisfied as gate count increases.
 
 ---
 
-## 8. Next: Cluster Sweep
+## 8. Next Steps
 
-R=100 replicates across n = {32, 48, 64, 96, 128} on BU SCC (SGE).
-4,000 total jobs, counter mode, 7 core tests, pipe mode.
+Phase 1 (coarse scan, 7 tests, CTR, R=100) is complete. Remaining phases:
+
+| Phase | Description | Jobs | Status |
+|-------|------------|------|--------|
+| 2 | Denser gate counts in transition regions | 1,400 | TODO |
+| 3 | Full dieharder battery (27 families, ~114 tests) | 300 | TODO |
+| 4 | NIST STS (188 tests) for USE report comparability | 200 | TODO |
+| 5 | OFB/iterate mode comparison | 800 | TODO |
 
 See [RNG_TEST_PLAN.md](RNG_TEST_PLAN.md) for the test matrix and
-[CLUSTER_RNG.md](CLUSTER_RNG.md) for the deployment guide.
+[CLUSTER_RNG.md](CLUSTER_RNG.md) for submission commands.
 
 ---
 
@@ -383,8 +402,8 @@ expected to be different.
 | Aspect | USE Cipher Report | Our Random Circuits |
 |--------|-------------------|---------------------|
 | Circuit design | Tree with inflationary + nonlinear gates | Linear chain of gate-57 only |
-| Width | n = 128 | n = 32 (initial sweep) |
-| Mode | OFB (output feedback) | Iterate (equivalent to OFB) |
+| Width | n = 128 | n = 32, 48, 64, 96, 128 |
+| Mode | OFB (output feedback) | CTR/counter (primary) + OFB/iterate (comparison) |
 | Test suites | NIST STS (188 tests) + Dieharder (~114 tests) | Dieharder (7-30 tests) |
 | Data size | 100M bits (Dieharder), 300M bits (NIST STS) | 1.6B bits (50M samples * 32 bits) |
 | Pass threshold | 96.92% (NIST minimum pass rate) | 95% |
@@ -410,8 +429,8 @@ expected to be different.
 
 ### Relevance
 
-- **OFB mode = iterate mode**: The USE report validates the bitstream
-  generation and testing methodology.
+- **OFB mode = our iterate mode**: The USE report validates the bitstream
+  generation and testing methodology. Our CTR mode is a stricter variant.
 - **Threshold behavior is universal**: Both encryption levels and gate counts
   show a sharp non-random-to-random transition. This is consistent with
   mixing-time theory.
