@@ -1,7 +1,7 @@
 # Random Circuits as Pseudorandom Permutations: RNG Testing Report
 
-**Date:** 2026-02-19
-**Status:** Preliminary results (quick sweep); extended sweep planned
+**Date:** 2026-02-19 (updated 2026-02-19)
+**Status:** Local sweep complete for n=32; cluster sweep planned for n=32-128
 
 ---
 
@@ -117,11 +117,12 @@ local_mixing_bin rng-stream \
   --wires 32 \
   --gates 1000 \
   --samples 100000000 \
-  --mode iterate \
-  --burn-in 1000 \
+  --mode counter \
   --seed 42 \
-| dieharder -g 200 -a
+| dieharder -g 200 -d 100
 ```
+
+Note: no burn-in is needed in counter mode (each C(i) is independent).
 
 The output is raw packed bits (no padding). For n=32 wires and
 k=100,000,000 samples, the stream is 32 * 100M / 8 = 381 MB, but it
@@ -152,7 +153,7 @@ satisfy.
 **Pipe mode (recommended)** -- generator pipes directly to dieharder:
 ```bash
 local_mixing_bin rng-stream --wires 32 --gates 1000 \
-  --samples 1000000000 --mode iterate --burn-in 1000 --seed 42 \
+  --samples 1000000000 --mode counter --seed 42 \
   | dieharder -g 200 -d 100
 ```
 
@@ -294,82 +295,73 @@ Beyond per-test p-values, there are several complementary measures:
 
 ---
 
-## 6. Preliminary Results
+## 6. Results (n=32, counter mode)
 
 ### Setup
 
-- **Quick sweep**: 2 widths (16, 32), 6 gate counts (100-5000), 3 replicates
-- **Bitstream**: 5,000,000 samples in iterate mode, 1,000 burn-in steps
-- **Tests run**: Only `diehard_rank_32x32` produced results (tests 0 and 1
-  needed more data than the 20MB files provided)
+- **Width**: n = 32 wires
+- **Gate counts**: m = 50, 100, 150, 200, 300, 500, 750
+- **Replicates**: R = 5 per configuration
+- **Tests**: 7 core dieharder tests (8 p-values), pipe mode
+- **Stream mode**: counter (C(0), C(1), ..., C(k))
 
-### Results table
+### Counter mode results
 
-| n (wires) | m=100 | m=200 | m=500 | m=1000 | m=2000 | m=5000 | m*(n) |
-|-----------|-------|-------|-------|--------|--------|--------|-------|
-| 16        | 33%   | 0%    | 0%    | 0%     | 0%     | 0%     | ---   |
-| 32        | 0%    | 33%   | 100%  | 100%   | 67%    | 100%   | 500   |
+| m (gates) | Pass rate | Notes |
+|-----------|-----------|-------|
+| 50        | 0% (0/5)  | All tests p=0 |
+| 100       | 0% (0/5)  | All tests p=0 |
+| 150       | 0% (0/5)  | All fail |
+| 200       | 0% (0/5)  | Birthdays passes, rest fail |
+| 300       | 0% (0/5)  | 5-6 of 8 tests pass but rank_6x8 + monobit still fail |
+| 500       | **100%** (5/5) | All circuits pass all tests |
+| 750       | **100%** (5/5) | Stable |
 
-(Pass rate = fraction of 3 replicates passing all tests)
+**m\*(32) = 500 gates** (~15.6 gates/wire) in counter mode.
 
-### Interpretation
+### Iterate mode comparison (same tests, R=5)
 
-**n=32 wires**: Clear transition. At m=200, most circuits still fail. At m=500,
-all 3 replicates pass. The threshold is **m*(32) ~ 500 gates** (roughly 15 gates
-per wire). The dip at m=2000 (67%) is sampling noise from only 3 replicates.
+| m (gates) | Counter | Iterate |
+|-----------|---------|---------|
+| 200       | 0%      | 0%      |
+| 300       | 0%      | 40%     |
+| 500       | 100%    | 100%    |
 
-**n=16 wires**: Never passes, even at 5000 gates. This is a **state-space
-limitation**, not a mixing failure. With 16 wires the entire permutation lives
-on 2^16 = 65,536 states. In iterate mode, the circuit traces a cycle through
-this space, and the cycle length is at most 65,536. The `diehard_rank_32x32`
-test builds 32x32 binary matrices needing 1024 bits each -- with only 16 bits
-per sample, the rank structure is constrained regardless of the circuit's
-quality. This is an artifact of the test, not the circuit.
+Both modes give m\*(32) = 500, but the transition is sharper in counter mode:
+at m=300, iterate passes 40% (cumulative mixing helps) while counter passes 0%.
 
-### What this tells us
+### Bottleneck tests
 
-1. **m*(32) ~ 500** is a first data point: about 15-16 gates per wire
-2. The 16-wire failure is a **test artifact** (state space too small for this
-   particular test), not evidence that 16-wire circuits don't mix
-3. Only 1 out of ~30 dieharder tests actually ran -- the full battery is needed
-4. 3 replicates is too few for reliable pass-rate estimation
+At m=300 in counter mode, most individual tests pass (birthdays, rank_32x32,
+runs, count_1s, sts_runs) but `diehard_rank_6x8` and `sts_monobit` consistently
+fail — these are the last tests to be satisfied as gate count increases.
 
 ---
 
 ## 7. Caveats and Limitations
 
-1. **Data reuse (rewind) in file mode.** The preliminary sweep used 200 MB
-   temp files (50M samples). This is sufficient for 4 of the 7 core tests
-   but causes data reuse (rewinding) for `diehard_rank_32x32` (~2.6x rewind),
-   `diehard_rank_6x8` (~1.2x), and especially `rgb_bitdist` (~13x rewind).
-   Results from these tests are unreliable.
-   **Fix**: The sweep script now supports `--pipe` mode which avoids this
-   problem entirely by piping the generator directly to dieharder per test.
-   Future sweeps should use `--pipe`.
+1. **Only R=5 replicates.** Pass-rate resolution is limited to 20% increments.
+   The cluster sweep with R=100 will give ~1% resolution and smooth curves.
 
-2. **Only 1 test ran in Phase 0** out of ~30 in the dieharder battery.
-   The extended Phase 1 sweep runs 7 core tests.
+2. **Only n=32 tested so far.** No data yet for n=48, 64, 96, 128.
+   The cluster sweep covers all five widths.
 
-3. **Only 3-5 replicates per config.** With R=5, the pass-rate resolution is
-   limited to {0%, 20%, 40%, 60%, 80%, 100%}. At least R=30 is needed for
-   +/- 3% confidence.
+3. **No scaling law yet.** With only one data point (m*(32) = 500), the
+   function m*(n) cannot be fit. Need 3-4 widths minimum.
 
-4. **Only 2 widths tested (16, 32).** No data yet for n=48 or n=64.
-
-5. **Iterate mode gives a weaker threshold.** Iterate mode benefits from
-   cumulative mixing over millions of re-applications, so it passes at lower
-   gate counts than counter mode. Counter mode (single-application) is the
-   correct test for PRP quality. Both modes have been swept for n=32.
-
-5. **No scaling law yet.** With only one data point (m*(32) = 500), the
-   function m*(n) cannot be fit. At least 3-4 widths are needed.
+4. **File mode data reuse (historical).** Early sweeps used file mode which
+   caused dieharder to silently rewind small files. All current sweeps use
+   pipe mode, which avoids this entirely.
 
 ---
 
-## 8. Concrete Plan for Full Sweep
+## 8. Next: Cluster Sweep
 
-See the next-steps plan in `RNG_TEST_PLAN.md` for the full sweep
-configuration, time estimates, and acceptance criteria.
+R=100 replicates across n = {32, 48, 64, 96, 128} on BU SCC (SGE).
+4,000 total jobs, counter mode, 7 core tests, pipe mode.
+
+See [RNG_TEST_PLAN.md](RNG_TEST_PLAN.md) for the test matrix and
+[CLUSTER_RNG.md](CLUSTER_RNG.md) for the deployment guide.
 
 ---
 
@@ -443,5 +435,5 @@ gates, composed in sequence, produces a permutation on `{0,1}^n`. The gates
 are chosen uniformly at random (with the constraint that consecutive gates
 differ).
 
-The circuit is implemented in Rust with bitwise operations on `u64`, giving
-native-speed evaluation for n <= 64.
+The circuit is implemented in Rust with bitwise operations on `u128`, giving
+native-speed evaluation for n up to 128.
