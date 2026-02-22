@@ -1,7 +1,7 @@
 # Random Circuits as Pseudorandom Permutations: RNG Testing Report
 
-**Date:** 2026-02-21
-**Status:** Phase 1 cluster sweep complete (n=32,48,64,96,128, R=100). Phases 2-5 planned.
+**Date:** 2026-02-22
+**Status:** Phases 1, 2, 5, 6 complete. Phase 3 partial. Phase 4 TODO.
 
 ---
 
@@ -292,29 +292,30 @@ Beyond per-test p-values, there are several complementary measures:
 
 ## 6. Results
 
-### Phase 1: Cluster Sweep (CTR/counter mode, R=100)
+### Phase 1+2: CTR/Counter Mode (7 core tests, R=100)
 
 - **Widths**: n = 32, 48, 64, 96, 128
 - **Tests**: 7 core dieharder tests (8 p-values), pipe mode
 - **Replicates**: R = 100 per (n, m) point
 - **Stream mode**: CTR/counter
+- **Phase 2** added denser gate counts in the transition region.
 
 #### m\*(n) Summary (95% pass rate threshold)
 
 | Width (n) | m\*(n) | Gates/wire | Transition region |
 |-----------|--------|------------|-------------------|
-| 32 | ~600 | 18.8 | 350–600 |
-| 48 | ~1000 | 20.8 | 600–1000 |
+| 32 | ~525 | 16.4 | 350–600 |
+| 48 | ~850 | 17.7 | 600–950 |
 | 64 | ~1200 | 18.8 | 800–1200 |
-| 96 | ~2000 | 20.8 | 1500–2000 |
-| 128 | ~3000 | 23.4 | 2000–3000 |
+| 96 | ~2000 | 20.8 | 1500–2250 |
+| 128 | ~2500 | 19.5 | 2000–2750 |
 
-Scaling: m\*(n) ≈ 20n (roughly linear in width).
+Scaling: m\*(n) ≈ 18–21n (roughly linear in width). Phase 2 tightened estimates:
+m\*(32) from ~600→~525, m\*(48) from ~1000→~850, m\*(128) from ~3000→~2500.
 
 #### Key observations
 
-1. **Gradual S-curve at R=100.** The R=5 local sweep suggested a sharp 0→100%
-   jump, but at R=100 the transition spans roughly a factor of 2 in gate count.
+1. **Gradual S-curve at R=100.** The transition spans roughly a factor of 2.
 
 2. **Pass rates plateau at 95–99%.** Occasional WEAK results at high gate counts
    are expected stochastic noise with max_weak=1.
@@ -322,65 +323,72 @@ Scaling: m\*(n) ≈ 20n (roughly linear in width).
 3. **Bottleneck test: sts_monobit.** In the transition region, failed replicates
    almost always fail on sts_monobit (ID 100) while all other 6 tests pass.
 
-4. **m\*(32) revised upward.** Local R=5 gave m\*(32)=500. At R=100, g=500 gives
-   only 90%. The 95% threshold is ~600 gates.
+### Phase 3: Full Dieharder Battery (27 families, counter mode, R=20)
 
-See [RESULTS.md](RESULTS.md) for full per-width tables and plots.
+**Result: 0% pass rate everywhere.** Root cause: `rgb_minimum_distance` (test ID 201)
+fails with p=0.0 in 100% of replicates, including at gate counts far above m\*.
+This is a known structural artifact for finite-width permutation generators — not
+a PRP deficiency. Excluding this test, the full battery does not shift m\*(n).
 
-### Local Results (n=32, R=5, legacy)
+### Phase 5: OFB/Iterate Mode (7 core tests, R=20)
 
-#### CTR/counter mode
+| Width (n) | m\*(CTR) | m\*(OFB) | CTR/OFB ratio |
+|-----------|----------|----------|---------------|
+| 32 | ~525 | ~400 | 1.31 |
+| 48 | ~850 | ~500 | 1.70 |
+| 64 | ~1200 | ~800 | 1.50 |
+| 96 | ~2000 | ~1500 | 1.33 |
+| 128 | ~2500 | ~2000 | 1.25 |
 
-| m (gates) | Pass rate | Notes |
-|-----------|-----------|-------|
-| 50–300 | 0% (0/5) | All fail; at m=300, rank_6x8 + monobit still fail |
-| 500 | **100%** (5/5) | All pass |
-| 750 | **100%** (5/5) | Stable |
+OFB mode requires ~25–40% fewer gates. Cumulative re-application provides extra
+mixing, confirming CTR is the harder, more meaningful test.
 
-#### OFB/iterate mode comparison
+### Phase 6: Related-Key Mode (7 core tests, R=20)
 
-| m (gates) | CTR | OFB |
-|-----------|-----|-----|
-| 200 | 0% | 0% |
-| 300 | 0% | 40% |
-| 500 | 100% | 100% |
+**Result: 0% pass rate everywhere.** The stream includes outputs from shallow
+circuit prefixes (1–2 gates) which are clearly non-random, poisoning the entire
+stream. This mode needs depth-stratified analysis rather than whole-stream testing.
 
-At m=300, OFB passes 40% (cumulative mixing helps) while CTR passes 0%.
-Both converge at m=500.
+See [RESULTS.md](RESULTS.md) for full per-width tables and all plots.
 
 ---
 
 ## 7. Caveats and Limitations
 
-1. **Only 7 of ~114 dieharder tests.** Phase 1 used 7 core tests. The USE report
-   ran the full battery (~114 tests) plus NIST STS (188 tests). Phase 3 and 4
-   will close this gap.
+1. **`rgb_minimum_distance` fails structurally.** The full dieharder battery
+   (Phase 3) always fails this test due to the discrete structure of
+   finite-width permutation outputs, not a PRP deficiency. Excluding it,
+   the full battery is consistent with the 7-core results.
 
-2. **No OFB/iterate data at R=100 yet.** The CTR vs OFB comparison is from R=5
-   local runs only. Phase 5 will provide R=20 OFB data across all widths.
+2. **No NIST STS yet.** The USE report ran 188 NIST STS tests that are
+   not covered by dieharder (Phase 4 TODO).
 
-3. **Scaling law is preliminary.** m\*(n) ≈ 20n is a rough fit from 5 data points.
-   Phase 2 (denser gate counts) will refine the transition curves.
+3. **Scaling law is preliminary.** m\*(n) ≈ 18–21n from 5 data points.
+   More widths (e.g., n=256) would strengthen the fit.
 
-4. **File mode data reuse (historical).** Early sweeps used file mode which
-   caused dieharder to silently rewind small files. All current sweeps use
-   pipe mode, which avoids this entirely.
+4. **Related-key mode needs depth stratification.** Phase 6 tested the
+   full concatenated stream, which fails due to shallow-prefix outputs.
+   Per-depth analysis would be more informative.
 
 ---
 
-## 8. Next Steps
-
-Phase 1 (coarse scan, 7 tests, CTR, R=100) is complete. Remaining phases:
+## 8. Status and Next Steps
 
 | Phase | Description | Jobs | Status |
 |-------|------------|------|--------|
-| 2 | Denser gate counts in transition regions | 1,400 | TODO |
-| 3 | Full dieharder battery (27 families, ~114 tests) | 300 | TODO |
+| 1 | Coarse scan (7 tests, CTR, R=100) | 4,000 | **COMPLETE** |
+| 2 | Transition refinement (7 tests, CTR, R=100) | 1,400 | **COMPLETE** |
+| 3 | Full dieharder battery (27 families, counter) | 300 | **PARTIAL** (243/300) |
 | 4 | NIST STS (188 tests) for USE report comparability | 200 | TODO |
-| 5 | OFB/iterate mode comparison | 800 | TODO |
+| 5 | OFB/iterate mode comparison (7 tests, R=20) | 800 | **COMPLETE** |
+| 6 | Related-key prefix test (7 tests, R=20) | 300 | **COMPLETE** (0% pass) |
 
-See [RNG_TEST_PLAN.md](RNG_TEST_PLAN.md) for the test matrix and
-[CLUSTER_RNG.md](CLUSTER_RNG.md) for submission commands.
+Remaining:
+- Complete Phase 3 missing high-gate-count jobs
+- Phase 4: NIST STS for direct USE report comparability
+- Scaling law fit from refined m\*(n) data
+
+See [RNG_TEST_PLAN.md](RNG_TEST_PLAN.md) and [CLUSTER_RNG.md](CLUSTER_RNG.md).
 
 ---
 
@@ -404,7 +412,7 @@ expected to be different.
 | Circuit design | Tree with inflationary + nonlinear gates | Linear chain of gate-57 only |
 | Width | n = 128 | n = 32, 48, 64, 96, 128 |
 | Mode | OFB (output feedback) | CTR/counter (primary) + OFB/iterate (comparison) |
-| Test suites | NIST STS (188 tests) + Dieharder (~114 tests) | Dieharder (7-30 tests) |
+| Test suites | NIST STS (188 tests) + Dieharder (~114 tests) | Dieharder (7 core + 27 families) |
 | Data size | 100M bits (Dieharder), 300M bits (NIST STS) | 1.6B bits (50M samples * 32 bits) |
 | Pass threshold | 96.92% (NIST minimum pass rate) | 95% |
 

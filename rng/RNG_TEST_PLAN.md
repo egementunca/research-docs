@@ -150,25 +150,25 @@ See [CLUSTER_RNG.md](../../local_mixing/CLUSTER_RNG.md) for the full deployment 
 | Phase | Description | Tests | Mode | Jobs | Status |
 |-------|------------|-------|------|------|--------|
 | 1 | Coarse scan, all widths | 7 core dieharder | counter | 4,000 | **COMPLETE** |
-| 2 | Transition refinement | 7 core dieharder | counter | 1,400 | TODO |
-| 3 | Full dieharder battery | 27 families (~114 tests) | counter | 300 | TODO |
+| 2 | Transition refinement | 7 core dieharder | counter | 1,400 | **COMPLETE** |
+| 3 | Full dieharder battery | 27 families (~114 tests) | counter | 300 | **PARTIAL** (243/300) |
 | 4 | NIST STS | 15 categories (188 tests) | counter | 200 | TODO |
-| 5 | Iterate/OFB comparison | 7 core dieharder | iterate | 800 | TODO |
-| 6 | Related-key (prefix) test | 7 core dieharder | related-key | 300 | TODO |
+| 5 | Iterate/OFB comparison | 7 core dieharder | iterate | 800 | **COMPLETE** |
+| 6 | Related-key (prefix) test | 7 core dieharder | related-key | 300 | **COMPLETE** (0% pass) |
 
 **Total: ~7,000 jobs**
 
-## Completed Results (Phase 1)
+## Completed Results (Phase 1+2)
 
 ### m\*(n) Estimates (95% threshold, counter mode, R=100)
 
-| Width (n) | m\*(n) | Gates/wire | Transition region |
-|-----------|--------|------------|-------------------|
-| 32 | ~600 | 18.8 | 350–600 |
-| 48 | ~1000 | 20.8 | 600–1000 |
-| 64 | ~1200 | 18.8 | 800–1200 |
-| 96 | ~2000 | 20.8 | 1500–2000 |
-| 128 | ~3000 | 23.4 | 2000–3000 |
+| Width (n) | m\*(n) CTR | Gates/wire | m\*(n) OFB | Transition region |
+|-----------|-----------|------------|-----------|-------------------|
+| 32 | ~525 | 16.4 | ~400 | 350–600 |
+| 48 | ~850 | 17.7 | ~500 | 600–950 |
+| 64 | ~1200 | 18.8 | ~800 | 800–1200 |
+| 96 | ~2000 | 20.8 | ~1500 | 1500–2250 |
+| 128 | ~2500 | 19.5 | ~2000 | 2000–2750 |
 
 See [RESULTS.md](RESULTS.md) for full tables and analysis.
 
