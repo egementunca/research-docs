@@ -43,6 +43,17 @@ OFB is an easier test because millions of cumulative re-applications provide
 extra mixing even if C alone is a weak PRP. We run OFB for comparison with
 prior work, not as the primary metric.
 
+### Related-Key Mode — supplementary
+
+`C[0..1](x), C[0..2](x), ..., C[0..M](x)` — fix input x, evaluate every prefix
+of the circuit (1 gate, 2 gates, ..., M gates). This tracks how pseudorandomness
+emerges gate by gate, directly observing the mixing process. Suggested by Ran Canetti;
+analogous to what Andrei describes as "layer by layer evolution" of string entropy.
+
+Related-key mode tests whether the "key schedule" (adding gates incrementally) leaks
+structure. The output for each input is M blocks (one per prefix length), then moves
+to the next input. CLI: `--mode related-key`.
+
 Empirical confirmation (n=32, R=5): OFB/iterate passes at m=300 (40%),
 CTR/counter fails completely at m=300 (0%).
 
@@ -143,8 +154,9 @@ See [CLUSTER_RNG.md](../../local_mixing/CLUSTER_RNG.md) for the full deployment 
 | 3 | Full dieharder battery | 27 families (~114 tests) | counter | 300 | TODO |
 | 4 | NIST STS | 15 categories (188 tests) | counter | 200 | TODO |
 | 5 | Iterate/OFB comparison | 7 core dieharder | iterate | 800 | TODO |
+| 6 | Related-key (prefix) test | 7 core dieharder | related-key | 300 | TODO |
 
-**Total: ~6,700 jobs**
+**Total: ~7,000 jobs**
 
 ## Completed Results (Phase 1)
 
@@ -196,8 +208,9 @@ python scripts/plot_rng_sweep.py --results all.json
 
 ## What Remains
 
-1. **Phase 2-5** on cluster (see CLUSTER_RNG.md for commands)
+1. **Phase 2-6** on cluster (see CLUSTER_RNG.md for commands)
 2. **Scaling law**: fit m\*(n) ~ n^alpha or n*log(n) from the 5+ data points
 3. **Transition characterization**: smooth S-curves from Phase 2 data
 4. **NIST-style plots**: "% accepted sequences" per test (Phase 4)
 5. **Iterate vs counter comparison**: show iterate gives easier threshold (Phase 5)
+6. **Related-key analysis**: gate-by-gate entropy emergence (Phase 6)
