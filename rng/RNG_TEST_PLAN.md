@@ -208,9 +208,14 @@ python scripts/plot_rng_sweep.py --results all.json
 
 ## What Remains
 
-1. **Phase 2-6** on cluster (see CLUSTER_RNG.md for commands)
-2. **Scaling law**: fit m\*(n) ~ n^alpha or n*log(n) from the 5+ data points
-3. **Transition characterization**: smooth S-curves from Phase 2 data
-4. **NIST-style plots**: "% accepted sequences" per test (Phase 4)
-5. **Iterate vs counter comparison**: show iterate gives easier threshold (Phase 5)
-6. **Related-key analysis**: gate-by-gate entropy emergence (Phase 6)
+1. **Phase 3 completion**: 243/300 jobs done; remaining 57 still on cluster
+2. **Phase 4 (NIST STS)**: Not yet started on cluster
+3. **Scaling law refinement**: Current 5 data points give R² > 0.98 for all models (n·log n, n·(log n)^k, linear, power law) — need n=256, 512 to discriminate
+4. **Phase 3 acceptance criteria**: Full battery (58 p-values) needs relaxed max_weak threshold; current max_weak=1 gives ~89% expected pass rate for a perfect generator
+
+### Completed
+
+- ~~Phase 2-6 on cluster~~ — Phases 2, 5, 6 complete; Phase 3 partial
+- ~~Transition characterization~~ — smooth S-curves from Phase 2 data (see plots/)
+- ~~Iterate vs counter comparison~~ — OFB threshold ~25-40% lower than CTR (Phase 5)
+- ~~Related-key analysis~~ — 0% pass everywhere; shallow prefixes poison stream (Phase 6)
