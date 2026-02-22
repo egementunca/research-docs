@@ -127,20 +127,25 @@ m\*(48) from ~1000 to ~850, m\*(128) from ~3000 to ~2500.
 
 ### Scaling Law Fits
 
+Theory-motivated models from Chamon et al.: the tree-organized circuit with
+inflationary + nonlinear gates achieves O(n log n) gate count (NC1 depth O(log n)).
+For gate-57-only circuits (no inflation), depth is at least (log n)^k with k > 1,
+giving gate count n · (log n)^k.
+
 | Model | CTR parameters | CTR R² | OFB parameters | OFB R² |
 |-------|---------------|--------|---------------|--------|
-| m = a·n | a=19.6 | 0.987 | a=14.8 | 0.953 |
-| m = a·n + b | a=21.2, b=−142 | **0.993** | a=17.7, b=−265 | 0.986 |
-| m = a·n·ln(n) + b | a=4.0, b=131 | 0.989 | a=3.3, b=−39 | 0.989 |
-| m = a·n^α | a=13.0, α=1.09 | 0.992 | a=4.0, α=1.29 | **0.989** |
+| a·n·log₂(n) + b | a=2.74, b=131 | 0.989 | a=2.31, b=−39 | 0.989 |
+| a·n·log₂(n)^k | a=9.20, k=0.40 | **0.992** | a=1.41, k=1.25 | **0.989** |
+| a·n | a=19.6 | 0.987 | a=14.8 | 0.953 |
+| a·n^α | a=13.0, α=1.09 | 0.992 | a=4.0, α=1.29 | 0.989 |
 
-**Best fit (CTR): m\*(n) ≈ 21n − 142** (affine, R²=0.993). The simple m=20n
-approximation works well (R²=0.987). All models fit within 2% R², so 5 data
-points cannot clearly distinguish linear from weakly superlinear scaling.
+All models fit within 1% R² for CTR — with only 5 data points, we cannot
+distinguish linear, n·log(n), or weakly superlinear scaling. The theoretical
+n·log₂(n)^k model gives k ≈ 0.4 for CTR (sublinear in log n, i.e. nearly linear
+overall) and k ≈ 1.25 for OFB. More widths (e.g. n=256, 512) are needed to
+resolve the scaling exponent.
 
-**OFB scaling is slightly superlinear** (α=1.29 for power law), but this may
-reflect insufficient data at low n where OFB transitions are hard to pin down
-with R=20.
+For practical purposes, **m\*(n) ≈ 20n** remains a good working estimate for CTR.
 
 ---
 
