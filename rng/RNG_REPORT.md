@@ -1,7 +1,7 @@
 # Random Circuits as Pseudorandom Permutations: RNG Testing Report
 
 **Date:** 2026-02-22
-**Status:** Phases 1, 2, 5, 6 complete. Phase 3 partial. Phase 4 TODO.
+**Status:** Phases 1, 2, 3, 5, 6 complete. Phase 4 TODO.
 
 ---
 
@@ -378,15 +378,14 @@ See [RESULTS.md](RESULTS.md) for full per-width tables and all plots.
 |-------|------------|------|--------|
 | 1 | Coarse scan (7 tests, CTR, R=100) | 4,000 | **COMPLETE** |
 | 2 | Transition refinement (7 tests, CTR, R=100) | 1,400 | **COMPLETE** |
-| 3 | Full dieharder battery (27 families, counter) | 300 | **PARTIAL** (243/300) |
+| 3 | Full dieharder battery (27 families, counter) | 300 | **COMPLETE** |
 | 4 | NIST STS (188 tests) for USE report comparability | 200 | TODO |
 | 5 | OFB/iterate mode comparison (7 tests, R=20) | 800 | **COMPLETE** |
 | 6 | Related-key prefix test (7 tests, R=20) | 300 | **COMPLETE** (0% pass) |
 
 Remaining:
-- Complete Phase 3 missing high-gate-count jobs
 - Phase 4: NIST STS for direct USE report comparability
-- Scaling law fit from refined m\*(n) data
+- Scaling law refinement: n=256, 512 to discriminate linear from superlinear
 
 See [RNG_TEST_PLAN.md](RNG_TEST_PLAN.md) and [CLUSTER_RNG.md](CLUSTER_RNG.md).
 

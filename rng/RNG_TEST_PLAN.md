@@ -151,7 +151,7 @@ See [CLUSTER_RNG.md](../../local_mixing/CLUSTER_RNG.md) for the full deployment 
 |-------|------------|-------|------|------|--------|
 | 1 | Coarse scan, all widths | 7 core dieharder | counter | 4,000 | **COMPLETE** |
 | 2 | Transition refinement | 7 core dieharder | counter | 1,400 | **COMPLETE** |
-| 3 | Full dieharder battery | 27 families (~114 tests) | counter | 300 | **PARTIAL** (243/300) |
+| 3 | Full dieharder battery | 27 families (~114 tests) | counter | 300 | **COMPLETE** |
 | 4 | NIST STS | 15 categories (188 tests) | counter | 200 | TODO |
 | 5 | Iterate/OFB comparison | 7 core dieharder | iterate | 800 | **COMPLETE** |
 | 6 | Related-key (prefix) test | 7 core dieharder | related-key | 300 | **COMPLETE** (0% pass) |
@@ -208,8 +208,7 @@ python scripts/plot_rng_sweep.py --results all.json
 
 ## What Remains
 
-1. **Phase 3 completion**: 243/300 jobs done; remaining 57 still on cluster
-2. **Phase 4 (NIST STS)**: Not yet started on cluster
+1. **Phase 4 (NIST STS)**: Not yet started on cluster
 3. **Scaling law refinement**: Current 5 data points give R² > 0.98 for all models (n·log n, n·(log n)^k, linear, power law) — need n=256, 512 to discriminate
 4. **Phase 3 acceptance criteria**: Full battery (58 p-values) needs relaxed max_weak threshold; current max_weak=1 gives ~89% expected pass rate for a perfect generator
 

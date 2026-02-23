@@ -158,7 +158,7 @@ failure even at gate counts well above the Phase 1 m\*.
 
 ### Root Cause: `rgb_minimum_distance` (test ID 201)
 
-This test fails with p=0.0 in **100% of all replicates** (243/243), including
+This test fails with p=0.0 in **100% of all replicates** (300/300), including
 configurations at the highest gate counts (e.g., n=128, m=4000 — which scored
 100% on the 7-core battery).
 
@@ -185,13 +185,14 @@ All other tests pass at rates consistent with the 7-core results.
 ### Reanalysis Excluding `rgb_minimum_distance`
 
 Even after excluding `rgb_minimum_distance`, pass rates at the highest gate counts
-reach only 55–69% — not 95%. The remaining failures are caused by **WEAK accumulation**:
+reach only 50–75% — not 95%. The remaining failures are caused by **WEAK accumulation**:
 with 58 test statistics and max_weak=1, even a perfect random generator would pass
 only ~89% of the time (binomial: P(≤1 WEAK out of 58) ≈ 0.89 at p_weak ≈ 0.01).
 
-Additionally, `dab_bytedistrib` shows elevated failure rates (~25%) at gate counts
-near the transition. At the highest gate counts (well above m\*), no individual test
-consistently fails — the reduced pass rate is entirely from WEAK accumulation.
+Additionally, `dab_bytedistrib` shows elevated failure rates at gate counts
+near the transition (up to 65% at n=64, g=1100). At the highest gate counts
+(well above m\*), no individual test consistently fails — the reduced pass rate
+is entirely from WEAK accumulation.
 
 **The max_weak=1 criterion is calibrated for 7–8 p-values, not 58.** For the full
 battery, a higher max_weak threshold (or per-test assessment) is needed.
@@ -203,15 +204,6 @@ The `rgb_minimum_distance` failure is structural (discrete permutation outputs),
 and the remaining gap is a statistical artifact of the max_weak=1 criterion
 applied to many tests. The 7-core battery is sufficient for characterizing
 the PRP transition.
-
-### Missing Data (still running)
-
-| Width | Gates | Status |
-|-------|-------|--------|
-| 32 | 800 | Missing |
-| 48 | 1200 | Missing |
-| 64 | 1500 | 7/20 complete |
-| 96 | 3000 | 16/20 complete |
 
 ---
 
@@ -400,7 +392,6 @@ pseudorandomness threshold. They test one fixed cipher to confirm it's random.
 
 ## What Remains
 
-1. **Phase 3**: Complete missing high-gate-count jobs (w32/g800, w48/g1200, partial w64/w96)
-2. **Phase 4**: NIST STS (188 tests) for comparability with USE report
-3. **Scaling law fit**: m\*(n) ~ n^alpha or n*log(n) from the refined data points
-4. **Related-key depth analysis**: Stratify Phase 6 p-values by prefix depth
+1. **Phase 4**: NIST STS (188 tests) for comparability with USE report
+2. **Scaling law refinement**: n=256, 512 to discriminate linear from superlinear
+3. **Related-key depth analysis**: Stratify Phase 6 p-values by prefix depth
