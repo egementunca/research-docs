@@ -156,18 +156,24 @@ For practical purposes, **m\*(n) ≈ 20n** remains a good working estimate for C
 The full battery (58 individual test statistics from 27 families) causes complete
 failure even at gate counts well above the Phase 1 m\*.
 
-### Root Cause: `rgb_minimum_distance` (test ID 201)
+### Root Cause: `rgb_minimum_distance` (test ID 201) — dieharder invocation bug
 
 This test fails with p=0.0 in **100% of all replicates** (300/300), including
 configurations at the highest gate counts (e.g., n=128, m=4000 — which scored
 100% on the 7-core battery).
 
-`rgb_minimum_distance` is a known-problematic dieharder test for finite-width
-permutation generators. It measures minimum Euclidean distance between
-d-dimensional points derived from the output stream. For n-bit permutation
-outputs reinterpreted as floating-point coordinates, the discrete structure
-of the permutation output space causes systematic failure regardless of
-pseudorandomness quality.
+**The failure is caused by a dieharder invocation bug, not a property of our
+circuits.** The sweep script runs `-d 201` without the required `-n` flag, so
+dieharder defaults to ntup=0, which attempts to compute minimum distances in
+**0-dimensional space** — a degenerate case that always produces p=0.
+
+Verification: dieharder's own built-in AES-OFB generator (`-g 205`) also
+**fails** `rgb_minimum_distance` at ntup=0, but **passes** at ntup=2–5.
+When dieharder runs its full battery via `-a`, it correctly loops ntup from
+2 to 5, avoiding this bug. Individual invocation via `-d 201` does not.
+
+See [RNG_REPORT.md §11](RNG_REPORT.md) for the full analysis including
+source code evidence and empirical verification.
 
 ### Other Notable Tests at High Gate Counts
 
@@ -176,7 +182,7 @@ elevated failure rates:
 
 | Test | Failure rate (high gates) | Notes |
 |------|--------------------------|-------|
-| `rgb_minimum_distance` | **100%** | Always fails — structural, not a PRP deficiency |
+| `rgb_minimum_distance` | **100%** | Always fails — ntup=0 invocation bug (see §11) |
 | `dab_bytedistrib` | ~25% | Sensitive to byte-level patterns |
 | `rgb_lagged_sum` | ~10% | Data-hungry, can show false positives |
 
@@ -200,7 +206,7 @@ battery, a higher max_weak threshold (or per-test assessment) is needed.
 ### Conclusion
 
 **The full dieharder battery does not reveal new PRP deficiencies above m\*(n).**
-The `rgb_minimum_distance` failure is structural (discrete permutation outputs),
+The `rgb_minimum_distance` failure is due to an invocation bug (ntup=0),
 and the remaining gap is a statistical artifact of the max_weak=1 criterion
 applied to many tests. The 7-core battery is sufficient for characterizing
 the PRP transition.
@@ -318,8 +324,8 @@ testing the full concatenated stream.
 5. **Linear scaling.** m\*(n) ≈ 18–21n for CTR, m\*(n) ≈ 10–16n for OFB.
 
 6. **Full battery (Phase 3) does not shift m\*(n).** The only always-failing
-   test is `rgb_minimum_distance`, which is a structural artifact of
-   finite-width permutation outputs, not a PRP deficiency.
+   test is `rgb_minimum_distance`, which fails due to a dieharder invocation
+   bug (ntup=0 default when run via `-d 201`), not a PRP deficiency.
 
 7. **OFB is easier by ~30%.** Confirming that iterate/OFB mode benefits
    from cumulative mixing and is a less stringent PRP test than CTR.

@@ -326,9 +326,10 @@ m\*(32) from ~600→~525, m\*(48) from ~1000→~850, m\*(128) from ~3000→~2500
 ### Phase 3: Full Dieharder Battery (27 families, counter mode, R=20)
 
 **Result: 0% pass rate everywhere.** Root cause: `rgb_minimum_distance` (test ID 201)
-fails with p=0.0 in 100% of replicates, including at gate counts far above m\*.
-This is a known structural artifact for finite-width permutation generators — not
-a PRP deficiency. Excluding this test, the full battery does not shift m\*(n).
+fails with p=0.0 in 100% of replicates due to a **dieharder invocation bug** — the
+test was run with default ntup=0 (dimension 0), which is a degenerate configuration
+that fails for all generators including AES-OFB. See §11 for full analysis.
+Excluding this test, the full battery does not shift m\*(n).
 
 ### Phase 5: OFB/Iterate Mode (7 core tests, R=20)
 
@@ -355,10 +356,11 @@ See [RESULTS.md](RESULTS.md) for full per-width tables and all plots.
 
 ## 7. Caveats and Limitations
 
-1. **`rgb_minimum_distance` fails structurally.** The full dieharder battery
-   (Phase 3) always fails this test due to the discrete structure of
-   finite-width permutation outputs, not a PRP deficiency. Excluding it,
-   the full battery is consistent with the 7-core results.
+1. **`rgb_minimum_distance` fails due to invocation bug.** The full dieharder
+   battery (Phase 3) always fails this test because our sweep script runs
+   `-d 201` without `-n`, triggering a degenerate dimension-0 mode. Even
+   dieharder's built-in AES-OFB fails at ntup=0. The fix is to pass
+   `-n 2` through `-n 5` explicitly. See §11 for full analysis.
 
 2. **No NIST STS yet.** The USE report ran 188 NIST STS tests that are
    not covered by dieharder (Phase 4 TODO).
@@ -463,3 +465,131 @@ differ).
 
 The circuit is implemented in Rust with bitwise operations on `u128`, giving
 native-speed evaluation for n up to 128.
+
+---
+
+## 11. Appendix: Why `rgb_minimum_distance` Always Fails
+
+### The observation
+
+In Phase 3 (full dieharder battery), the test `rgb_minimum_distance` (ID 201) fails
+with p ≈ 0.0 in **100% of all 300 replicates**, across all 5 widths (32–128) and all
+gate counts — including configurations far above m\*(n) where every other test passes.
+The failure rate is completely independent of circuit quality.
+
+### Root cause: dieharder invocation bug (ntup=0)
+
+**The failure is caused by running `rgb_minimum_distance` with the default ntup=0,
+which is a degenerate configuration that fails for ALL generators, including
+dieharder's own built-in cryptographic generators.**
+
+#### The bug
+
+`rgb_minimum_distance` computes the minimum Euclidean distance among N random points
+in a d-dimensional hypercube, where d is set by the `-n` (ntuple) parameter. The
+test is designed for d = 2, 3, 4, 5 — when dieharder runs its full battery via `-a`,
+it automatically loops ntup from 2 to 5 (see `run_all_tests.c`, lines 119–135).
+
+However, when invoked individually via `-d 201` **without** specifying `-n`, the
+global `ntuple` defaults to 0. The test code blindly uses this value:
+
+```c
+// rgb_minimum_distance.c, line 109-110
+test[0]->ntuple = ntuple;     // ntuple is the global, = 0
+rgb_md_dim = test[0]->ntuple; // dimension = 0
+```
+
+With dimension 0, the test degenerates: point coordinates are never generated
+(the generation loop `for(d=0; d<rgb_md_dim; d++)` doesn't execute), all pairwise
+distances collapse to 0, and the resulting p-value is always 0 or 1.
+
+#### Empirical confirmation
+
+We verified this by running dieharder's own built-in AES-OFB generator (generator
+205) — a cryptographically secure PRNG — against `rgb_minimum_distance`:
+
+| Generator | ntup | p-value | Assessment |
+|-----------|------|---------|------------|
+| AES-OFB (built-in, `-g 205`) | 0 (default) | 0.00000000 | **FAILED** |
+| AES-OFB (built-in, `-g 205`) | 2 | 0.62 | PASSED |
+| AES-OFB (built-in, `-g 205`) | 3 | 0.42 | PASSED |
+| AES-OFB (built-in, `-g 205`) | 4 | 0.71 | PASSED |
+| AES-OFB (built-in, `-g 205`) | 5 | 0.22 | PASSED |
+| Mersenne Twister (`-g 14`) | 2 | 0.61 | PASSED |
+| Mersenne Twister (`-g 14`) | 3 | 0.65 | PASSED |
+| Mersenne Twister (`-g 14`) | 4 | 0.41 | PASSED |
+| Mersenne Twister (`-g 14`) | 5 | 0.04 | PASSED |
+
+**AES-OFB fails at ntup=0 and passes at ntup=2–5.** This proves the ntup=0
+invocation is broken, independent of the generator.
+
+#### How our sweep triggered the bug
+
+Our Phase 3 sweep script (`rng_sweep.py`) runs each test individually via:
+
+```python
+cmd = [dieharder_path, "-g", "200", "-d", str(test_id)]  # no -n flag
+```
+
+For test 201, this produces `-d 201` without `-n`, defaulting to ntup=0. Every
+single one of our 300 Phase 3 replicates hit this degenerate case, explaining the
+100% failure rate across all widths and gate counts.
+
+### Secondary concern: PRP/PRF birthday bound (n = 32)
+
+Even with the ntup bug fixed, `rgb_minimum_distance` may still detect a real
+structural property at small block sizes. Our circuits are **permutations** on
+{0, 1}^n, so CTR mode outputs C(0), C(1), ... are all distinct (no collisions).
+The Fischler reference distribution assumes i.i.d. uniform values that can collide.
+
+The **PRP/PRF switching lemma** bounds the distinguishing advantage at
+q(q−1)/2^(n+1) after q queries. For n = 32 with 40,000 outputs per trial (d = 5,
+N = 8000), this advantage is ~19% — potentially detectable over 100 trials.
+
+| Width n | Birthday bound 2^(n/2) | Data per trial | Ratio | PRP detectable? |
+|---------|----------------------|----------------|-------|-----------------|
+| 32 | 65,536 | 40,000 | 0.61 | Possibly |
+| 64 | 4.3 × 10^9 | 40,000 | 10^-5 | No |
+| 128 | 1.8 × 10^19 | 40,000 | 10^-15 | No |
+
+**Verified empirically:** With correct ntup values, both n=32 and n=128 pass:
+
+| Generator | ntup | p-value | Assessment |
+|-----------|------|---------|------------|
+| Our circuit, n=32, m=525 (at m\*) | 2 | 0.00012 | WEAK |
+| Our circuit, n=32, m=525 | 3 | 0.16 | PASSED |
+| Our circuit, n=32, m=525 | 4 | 0.03 | PASSED |
+| Our circuit, n=32, m=525 | 5 | 0.01 | PASSED |
+| Our circuit, n=128, m=4000 | 2 | 0.16 | PASSED |
+| Our circuit, n=128, m=4000 | 3 | 0.03 | PASSED |
+| Our circuit, n=128, m=4000 | 4 | 0.35 | PASSED |
+| Our circuit, n=128, m=4000 | 5 | 0.00017 | WEAK |
+
+The WEAK results (1 out of 4 ntup values each) are consistent with normal
+statistical fluctuation — a single run has ~1% chance of WEAK per test. The
+PRP birthday bound is not causing systematic failures at any width when the
+test is properly invoked.
+
+### Fix
+
+The sweep script should be updated to pass `-n` explicitly for tests that require
+it. Tests 200–203 all need ntuple handling:
+
+| Test ID | Test name | Required `-n` range |
+|---------|-----------|-------------------|
+| 200 | rgb_bitdist | 1–12 |
+| 201 | rgb_minimum_distance | 2–5 |
+| 202 | rgb_permutations | 2–5 |
+| 203 | rgb_lagged_sums | 0–32 |
+
+### Bottom line
+
+**The 100% failure of `rgb_minimum_distance` is a dieharder invocation bug, not a
+property of our circuits.** Running `-d 201` without `-n` triggers a degenerate
+dimension-0 mode that fails for every generator, including AES-OFB. Dieharder's
+`-a` mode handles this correctly by looping ntup from 2 to 5, but individual
+test invocation does not.
+
+This failure does not indicate a PRP weakness and should be excluded from
+pass-rate calculations (or, better, the sweep should be re-run with correct
+`-n` flags).

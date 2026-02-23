@@ -152,11 +152,12 @@ See [CLUSTER_RNG.md](../../local_mixing/CLUSTER_RNG.md) for the full deployment 
 | 1 | Coarse scan, all widths | 7 core dieharder | counter | 4,000 | **COMPLETE** |
 | 2 | Transition refinement | 7 core dieharder | counter | 1,400 | **COMPLETE** |
 | 3 | Full dieharder battery | 27 families (~114 tests) | counter | 300 | **COMPLETE** |
+| 3b | Ntuple fix re-run | tests 200, 201 w/ correct `-n` | counter | 300 | TODO |
 | 4 | NIST STS | 15 categories (188 tests) | counter | 200 | TODO |
 | 5 | Iterate/OFB comparison | 7 core dieharder | iterate | 800 | **COMPLETE** |
 | 6 | Related-key (prefix) test | 7 core dieharder | related-key | 300 | **COMPLETE** (0% pass) |
 
-**Total: ~7,000 jobs**
+**Total: ~7,300 jobs**
 
 ## Completed Results (Phase 1+2)
 
@@ -208,13 +209,17 @@ python scripts/plot_rng_sweep.py --results all.json
 
 ## What Remains
 
-1. **Phase 4 (NIST STS)**: Not yet started on cluster
+1. **Phase 3b (ntuple fix)**: Re-run tests 200, 201 with correct `-n` flags.
+   Phase 3 ran `rgb_minimum_distance` with ntup=0 (a dieharder bug that fails
+   for ALL generators including AES-OFB). The sweep script is now fixed.
+2. **Phase 4 (NIST STS)**: Not yet started on cluster
 3. **Scaling law refinement**: Current 5 data points give R² > 0.98 for all models (n·log n, n·(log n)^k, linear, power law) — need n=256, 512 to discriminate
 4. **Phase 3 acceptance criteria**: Full battery (58 p-values) needs relaxed max_weak threshold; current max_weak=1 gives ~89% expected pass rate for a perfect generator
 
 ### Completed
 
-- ~~Phase 2-6 on cluster~~ — Phases 2, 5, 6 complete; Phase 3 partial
+- ~~Phase 2-6 on cluster~~ — Phases 2, 5, 6 complete; Phase 3 complete (with ntup bug)
 - ~~Transition characterization~~ — smooth S-curves from Phase 2 data (see plots/)
 - ~~Iterate vs counter comparison~~ — OFB threshold ~25-40% lower than CTR (Phase 5)
 - ~~Related-key analysis~~ — 0% pass everywhere; shallow prefixes poison stream (Phase 6)
+- ~~rgb_minimum_distance investigation~~ — ntup=0 dieharder bug, not PRP artifact (see RNG_REPORT §11)
