@@ -104,66 +104,62 @@ GRAY = "#6b7280"
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# Figure 1: Uniform vs Balanced pass fraction at 600 gates (box/scatter)
+# Figure 1: Full sweep — Uniform vs Balanced at all gate counts
 # ══════════════════════════════════════════════════════════════════════════
 
-uniform_results = load_json_results(
-    os.path.join(LOCAL_MIXING, "results_128w_uniform_full/results/w128_g600_*.json")
+all_uniform = load_json_results(
+    os.path.join(LOCAL_MIXING, "results_128w_uniform_full/results/w128_g*.json")
 )
-balanced_600 = load_json_results(
-    os.path.join(LOCAL_MIXING, "results_128w_balanced_full/results/w128_g600_*.json")
-)
-balanced_1000 = load_json_results(
-    os.path.join(LOCAL_MIXING, "results_128w_balanced_full/results/w128_g1000_*.json")
+all_balanced = load_json_results(
+    os.path.join(LOCAL_MIXING, "results_128w_balanced_full/results/w128_g*.json")
 )
 
-fig, ax = plt.subplots(figsize=(8, 5))
+def gate_summary(results):
+    """Group results by gate count, return (gates, mean_pass%, individual_fracs)."""
+    from collections import defaultdict
+    by_gate = defaultdict(list)
+    for r in results:
+        by_gate[r["gates"]].append(r["pass_frac"] * 100)
+    out = []
+    for g in sorted(by_gate):
+        fracs = by_gate[g]
+        out.append((g, np.mean(fracs), fracs))
+    return out
 
-uniform_fracs = [r["pass_frac"] * 100 for r in uniform_results]
-balanced_600_fracs = [r["pass_frac"] * 100 for r in balanced_600]
-balanced_1000_fracs = [r["pass_frac"] * 100 for r in balanced_1000]
+u_summary = gate_summary(all_uniform)
+b_summary = gate_summary(all_balanced)
 
-positions = [1, 2, 3]
-bp = ax.boxplot(
-    [uniform_fracs, balanced_600_fracs, balanced_1000_fracs],
-    positions=positions,
-    widths=0.5,
-    patch_artist=True,
-    showmeans=True,
-    meanprops=dict(marker="D", markerfacecolor="white", markeredgecolor="black", markersize=6),
-)
+fig, ax = plt.subplots(figsize=(10, 6))
 
-colors = [RED, BLUE, GREEN]
-for patch, color in zip(bp["boxes"], colors):
-    patch.set_facecolor(color)
-    patch.set_alpha(0.35)
+# Plot uniform
+u_gates = [s[0] for s in u_summary]
+u_means = [s[1] for s in u_summary]
+ax.plot(u_gates, u_means, "o-", color=RED, linewidth=2.5, markersize=8, label="Uniform", zorder=4)
+for g, mean, fracs in u_summary:
+    jitter = np.random.default_rng(int(g)).uniform(-15, 15, len(fracs))
+    ax.scatter([g + j for j in jitter], fracs, color=RED, s=20, alpha=0.35, zorder=3)
 
-# scatter individual points
-for i, (fracs, color) in enumerate(
-    zip([uniform_fracs, balanced_600_fracs, balanced_1000_fracs], colors)
-):
-    jitter = np.random.default_rng(42).uniform(-0.12, 0.12, len(fracs))
-    ax.scatter(
-        [positions[i] + j for j in jitter],
-        fracs,
-        color=color,
-        s=40,
-        zorder=5,
-        edgecolor="white",
-        linewidth=0.5,
-    )
+# Plot balanced
+b_gates = [s[0] for s in b_summary]
+b_means = [s[1] for s in b_summary]
+ax.plot(b_gates, b_means, "s-", color=BLUE, linewidth=2.5, markersize=8, label="Balanced", zorder=4)
+for g, mean, fracs in b_summary:
+    jitter = np.random.default_rng(int(g)+1).uniform(-15, 15, len(fracs))
+    ax.scatter([g + j for j in jitter], fracs, color=BLUE, s=20, alpha=0.35, zorder=3)
 
-ax.set_xticks(positions)
-ax.set_xticklabels(["Uniform\n600 gates", "Balanced\n600 gates", "Balanced\n1000 gates"])
-ax.set_ylabel("Tests passed (%)")
-ax.set_title("128 wires — Full Dieharder battery (30 tests, 10 circuits each)")
-ax.set_ylim(0, 105)
 ax.axhline(y=95, color=GRAY, linestyle="--", alpha=0.5, label="95% threshold")
-ax.legend(loc="lower right")
+ax.set_xlabel("Number of gates")
+ax.set_ylabel("Tests passed (%)")
+ax.set_title("128 wires — Full Dieharder battery (30 tests)\nEach dot = one circuit, line = mean across 10 circuits")
+ax.set_ylim(0, 105)
+ax.legend(loc="lower right", fontsize=11)
 fig.tight_layout()
 fig.savefig(os.path.join(PLOT_DIR, "fig1_uniform_vs_balanced.png"), dpi=150)
 print("Saved fig1_uniform_vs_balanced.png")
 plt.close()
+
+# Keep references for fig6
+balanced_1000 = [r for r in all_balanced if r["gates"] == 1000]
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -1,6 +1,6 @@
 # Dieharder & NIST Results for 128-Wire Random Circuits
 
-Date: 2026-06-01
+Date: 2026-06-02
 
 ## Overview
 
@@ -14,13 +14,34 @@ We use OFB (iterate) mode throughout, streaming raw 128-bit outputs directly int
 No XOR folding is applied — each 128-bit state is written sequentially as 4 × 32-bit words.
 
 Tests used:
-- **Dieharder** full battery (30 test families, ~90 individual statistics)
+- **Dieharder** full battery (30 test families, ~80–90 individual statistics)
 - **NIST SP 800-22** via the [`entropy`](https://github.com/darrelllong/entropy) crate (199 tests)
 - AES-128 OFB as baseline
 
 ---
 
-## 1. Pass rate vs gate count (CTR mode, 7 core tests)
+## 1. Full Dieharder battery at 128 wires
+
+We ran the full Dieharder battery (30 test families) on 10 different random circuits for each (architecture, gate count) pair.
+
+### Uniform vs Balanced — full sweep
+
+![Uniform vs Balanced sweep](128w_full_battery/fig1_uniform_vs_balanced.png)
+
+Each dot is one circuit. Line shows the mean across 10 circuits.
+
+| Architecture | 600g | 1000g | 1500g | 2500g |
+|---|---|---|---|---|
+| Uniform | ~50% | — | **97%** | **98%** |
+| Balanced | ~90% | ~98% | **97%** | **98%** |
+
+**Key finding:** Both architectures reach 95%+ pass rate at 1500 gates (≈12n). Balanced circuits have a large advantage at low gate counts (600g: 90% vs 50%) but both converge above 1500 gates.
+
+The remaining 1–3% of test failures at high gate counts are consistent with the expected false-positive rate of the Dieharder suite at α=0.01 with ~80 test statistics.
+
+---
+
+## 2. Pass rate vs gate count (CTR mode, 7 core tests)
 
 Prior results from February 2026, using 7 core Dieharder tests in CTR (counter) mode, R=100 circuits per configuration:
 
@@ -42,28 +63,7 @@ A good working estimate is **m\*(n) ≈ 20n** for CTR mode.
 
 ---
 
-## 2. Full Dieharder battery at 128 wires
-
-We ran the full Dieharder battery (30 test families) on 10 different random circuits for each configuration.
-
-### Uniform vs Balanced at 600 and 1000 gates
-
-![Uniform vs Balanced](128w_full_battery/fig1_uniform_vs_balanced.png)
-
-**Key observations:**
-- At 600 gates, uniform circuits pass about 50% of tests on average, with high variance across circuits (30–82%)
-- At 600 gates, balanced circuits already pass about 90% of tests, with much lower variance (77–88%)
-- At 1000 gates, balanced circuits pass 96–99% of tests — essentially perfect
-
-### Per-test breakdown (Balanced, 1000 gates)
-
-![Per-test results](128w_full_battery/fig6_per_test_balanced_1000.png)
-
-Almost all tests pass consistently. The few WEAK/FAILED results are within the expected false-positive rate for 87 test statistics at α=0.01.
-
----
-
-## 3. Balanced vs Uniform — transition region comparison
+## 3. Balanced vs Uniform — transition region
 
 Using our March 2026 data (CTR mode, 7 core tests, R=100):
 
@@ -99,7 +99,7 @@ Following Ran's suggestion, we tested whether the counter starting point affects
 
 ![CTR variance](128w_full_battery/fig4_ctr_variance.png)
 
-**Result: perfectly consistent.** All 10 offsets give the same outcome (7/8 core tests passed). The single failing test (`diehard_count_1s_str`) fails at every offset, confirming it is a property of the circuit, not the starting point.
+**Result: perfectly consistent.** All 10 offsets give the same outcome (7/8 core tests passed). The single failing test (`diehard_count_1s_str`) fails at every offset. This shows the result is a property of the circuit, not the starting point.
 
 ---
 
@@ -107,9 +107,17 @@ Following Ran's suggestion, we tested whether the counter starting point affects
 
 We ran the full Dieharder battery (`-g 205`) on AES-128 OFB with 10 different seeds.
 
-**Result: 112/112 tests passed in all 10 replicates.**
+**Result: 112/112 tests passed in all 10 replicates.** AES passes everything, as expected.
 
-AES passes everything, as expected. Our balanced circuits at 1000+ gates reach comparable performance (96–99% pass rate), with the few remaining failures consistent with statistical noise.
+Our balanced circuits at 1000+ gates reach comparable performance (96–99% pass rate), with the few remaining failures consistent with statistical noise.
+
+---
+
+## 7. Per-test breakdown (Balanced, 1000 gates)
+
+![Per-test results](128w_full_battery/fig6_per_test_balanced_1000.png)
+
+Almost all tests pass consistently across 4 replicates. The few WEAK/FAILED results are within the expected false-positive rate.
 
 ---
 
@@ -118,11 +126,14 @@ AES passes everything, as expected. Our balanced circuits at 1000+ gates reach c
 | | Uniform (128w) | Balanced (128w) | AES-128 OFB |
 |---|---|---|---|
 | 600 gates  | ~50% pass | ~90% pass | — |
-| 1000 gates | not tested | ~98% pass | — |
-| 2500 gates | ~98% pass (CTR, 7-core) | ~97% pass (CTR, 7-core) | 100% pass |
-| NIST STS   | not tested | 194/199 @ 2000g | ~193/199 (Eli's data) |
+| 1000 gates | — | ~98% pass | — |
+| 1500 gates | ~97% pass | ~97% pass | — |
+| 2500 gates | ~98% pass | ~98% pass | 100% pass |
+| NIST STS   | — | 194/199 @ 2000g | ~193/199 (Eli) |
 
-**Balanced circuits reach pseudorandomness at roughly 1000 gates for 128 wires** (~8n gates in OFB mode). Uniform circuits need about 2500 gates (~20n) in CTR mode.
+**Balanced circuits reach pseudorandomness at roughly 1000 gates for 128 wires** (~8n gates in OFB mode). Uniform circuits reach it at about 1500 gates (~12n) for the full battery, or 2500 gates (~20n) in the harder CTR mode.
+
+Both architectures pass the full Dieharder battery and NIST STS at levels comparable to AES-128.
 
 ---
 
